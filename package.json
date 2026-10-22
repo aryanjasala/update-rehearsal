@@ -1,0 +1,20 @@
+{
+  "name": "update-rehearsal",
+  "private": true,
+  "description": "Try plugin, theme and PHP updates on a disposable copy of your site in WordPress Playground before you update for real.",
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "env:start": "docker compose -f tests/e2e/env/docker-compose.yml up -d",
+    "env:stop": "docker compose -f tests/e2e/env/docker-compose.yml down -v",
+    "test:e2e": "playwright test",
+    "screenshots": "SCREENSHOTS=1 playwright test screenshots",
+    "demo": "DEMO=1 playwright test demo",
+    "test:unit:js": "node --test tests/js/"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

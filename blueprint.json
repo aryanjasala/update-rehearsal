@@ -1,0 +1,34 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "Update Rehearsal demo",
+		"author": "aryanjasala"
+	},
+	"landingPage": "/wp-admin/tools.php?page=update-rehearsal",
+	"preferredVersions": {
+		"php": "8.3",
+		"wp": "latest"
+	},
+	"features": {
+		"networking": true
+	},
+	"login": true,
+	"steps": [
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "git:directory",
+				"url": "https://github.com/aryanjasala/update-rehearsal",
+				"ref": "main"
+			},
+			"options": {
+				"activate": true,
+				"targetFolderName": "update-rehearsal"
+			}
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php require_once '/wordpress/wp-load.php'; $plugin = function ( $v ) { return \"<?php\\n/**\\n * Plugin Name: Recipe Cards\\n * Version: $v\\n */\\nadd_filter( 'the_content', function ( \\$c ) { return \\$c . '<p class=\\\"recipe-card\\\">Serves 4.</p>'; } );\\n\"; }; wp_mkdir_p( WP_PLUGIN_DIR . '/recipe-cards' ); file_put_contents( WP_PLUGIN_DIR . '/recipe-cards/recipe-cards.php', $plugin( '1.0' ) ); $dir = wp_upload_dir()['basedir']; wp_mkdir_p( $dir ); $zip = new ZipArchive(); $zip->open( $dir . '/recipe-cards-1.1.zip', ZipArchive::CREATE ); $zip->addFromString( 'recipe-cards/recipe-cards.php', $plugin( '1.1' ) ); $zip->close(); wp_mkdir_p( WPMU_PLUGIN_DIR ); file_put_contents( WPMU_PLUGIN_DIR . '/demo-update.php', \"<?php\\nadd_filter( 'site_transient_update_plugins', function ( \\$v ) { \\$v = is_object( \\$v ) ? \\$v : new stdClass(); \\$v->response = isset( \\$v->response ) ? (array) \\$v->response : array(); \\$v->response['recipe-cards/recipe-cards.php'] = (object) array( 'slug' => 'recipe-cards', 'plugin' => 'recipe-cards/recipe-cards.php', 'new_version' => '1.1', 'package' => wp_upload_dir()['basedir'] . '/recipe-cards-1.1.zip' ); return \\$v; } );\\n\" ); activate_plugin( 'recipe-cards/recipe-cards.php' ); update_option( 'blogname', 'Kitchen Notes' ); wp_insert_post( array( 'post_title' => 'Lemon tart', 'post_status' => 'publish', 'post_content' => '<!-- wp:paragraph --><p>A short pastry case and a sharp lemon curd.</p><!-- /wp:paragraph -->' ) );"
+		}
+	]
+}
