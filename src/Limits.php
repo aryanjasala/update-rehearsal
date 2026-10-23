@@ -25,7 +25,50 @@ final class Limits {
 	 */
 	public const DROPINS_TO_SKIP = array( 'object-cache.php', 'advanced-cache.php', 'db.php' );
 
-	public const SKIPPED_PATHS = array( '.git', '.svn', '.hg', 'node_modules', '.DS_Store' );
+	/**
+	 * Development leftovers never copied. A name matches a file or folder anywhere;
+	 * a leading slash matches from the top of the plugin or theme folder only.
+	 */
+	public const SKIPPED_PATHS = array( '.git', '.svn', '.hg', '.github', '.wordpress-org', 'node_modules', '.DS_Store', '*.zip', '/tests', '/test' );
+
+	/**
+	 * How much of each kind of file is left once zipped, by extension. Text
+	 * shrinks to about a quarter, images and archives hardly at all.
+	 */
+	public const PACK_RATIOS = array(
+		'database' => 0.25,
+		'default'  => 0.5,
+		'php'      => 0.25,
+		'js'       => 0.3,
+		'mjs'      => 0.3,
+		'css'      => 0.25,
+		'scss'     => 0.25,
+		'json'     => 0.2,
+		'html'     => 0.25,
+		'txt'      => 0.35,
+		'md'       => 0.35,
+		'svg'      => 0.3,
+		'xml'      => 0.2,
+		'po'       => 0.3,
+		'pot'      => 0.3,
+		'map'      => 0.3,
+		'twig'     => 0.25,
+		'lock'     => 0.25,
+		'png'      => 1.0,
+		'jpg'      => 1.0,
+		'jpeg'     => 1.0,
+		'gif'      => 1.0,
+		'webp'     => 1.0,
+		'avif'     => 1.0,
+		'woff'     => 1.0,
+		'woff2'    => 1.0,
+		'zip'      => 1.0,
+		'gz'       => 1.0,
+		'mp3'      => 1.0,
+		'mp4'      => 1.0,
+		'webm'     => 1.0,
+		'pdf'      => 0.9,
+	);
 
 	/**
 	 * Largest bundle the plugin builds, in bytes.
@@ -34,7 +77,8 @@ final class Limits {
 	 */
 	public static function bundle_max_bytes(): int {
 		/**
-		 * Filters the size cap of a rehearsal bundle (database plus code), in bytes.
+		 * Filters the size cap of a rehearsal bundle (database plus code), in bytes,
+		 * measured on what is sent: the zipped parts, not the files on disk.
 		 *
 		 * @param int $bytes Default 100 MB. At least 1 MB.
 		 */
@@ -157,19 +201,82 @@ final class Limits {
 	}
 
 	/**
-	 * File and folder names never copied from plugins and themes.
+	 * Files and folders never copied from plugins and themes.
 	 *
 	 * @return string[]
 	 */
 	public static function skipped_paths(): array {
 		/**
-		 * Filters file and folder names left out wherever they appear in plugin and theme folders.
+		 * Filters the files and folders left out of plugin and theme folders. Each
+		 * entry is a name or a shell pattern such as *.zip, matched wherever it
+		 * appears; with a leading slash, such as /tests, it matches from the top
+		 * of the plugin or theme folder only.
 		 *
-		 * @param string[] $names Default .git, .svn, .hg, node_modules, .DS_Store.
+		 * @param string[] $patterns Default .git, .svn, .hg, .github, .wordpress-org, node_modules, .DS_Store, *.zip, /tests and /test.
 		 */
 		$names = (array) apply_filters( 'update_rehearsal_skipped_paths', self::SKIPPED_PATHS );
 
 		return array_values( array_filter( array_map( 'strval', array_filter( $names, 'is_scalar' ) ) ) );
+	}
+
+	/**
+	 * Whether Composer packages installed only for development stay out of the copy.
+	 *
+	 * @return bool
+	 */
+	public static function skip_dev_packages(): bool {
+		/**
+		 * Filters whether the copy leaves out Composer packages a plugin or theme
+		 * installed for development only (the dev-package-names in its
+		 * vendor/composer/installed.json), such as PHPUnit or PHPCS in a
+		 * checkout. Files their autoloader loads at start are kept.
+		 *
+		 * @param bool $skip Default true.
+		 */
+		return (bool) apply_filters( 'update_rehearsal_skip_dev_packages', true );
+	}
+
+	/**
+	 * How much of each kind of file is left once zipped, for the size estimate.
+	 *
+	 * @return array<string, float> Extension (or database, default) => share left, 0.01 to 1.
+	 */
+	public static function pack_ratios(): array {
+		/**
+		 * Filters how much of each kind of file the estimate expects to be left
+		 * once zipped. Keys are lower-case file extensions, plus database (the
+		 * tables) and default (any other file). 0.25 means a quarter of the size.
+		 *
+		 * @param array $ratios Extension => share left. Default: text about 0.25, images and archives 1.
+		 */
+		$ratios = (array) apply_filters( 'update_rehearsal_pack_ratios', self::PACK_RATIOS );
+		$clean  = array();
+		foreach ( $ratios as $key => $ratio ) {
+			if ( is_numeric( $ratio ) ) {
+				$clean[ strtolower( (string) $key ) ] = max( 0.01, min( 1.0, (float) $ratio ) );
+			}
+		}
+
+		return $clean + array(
+			'database' => self::PACK_RATIOS['database'],
+			'default'  => self::PACK_RATIOS['default'],
+		);
+	}
+
+	/**
+	 * Seconds a code size measurement is reused before the next one.
+	 *
+	 * @return int
+	 */
+	public static function estimate_lifetime(): int {
+		/**
+		 * Filters how long the measured size of the plugin and theme code is kept.
+		 * It is also cleared when plugins or themes are installed, updated,
+		 * turned on or off, and when the settings change.
+		 *
+		 * @param int $seconds Default 1 day. At least 1 minute.
+		 */
+		return max( MINUTE_IN_SECONDS, (int) apply_filters( 'update_rehearsal_estimate_lifetime', DAY_IN_SECONDS ) );
 	}
 
 	/**

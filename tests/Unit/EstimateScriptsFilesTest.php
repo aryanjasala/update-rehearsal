@@ -21,7 +21,15 @@ use Mockery;
  */
 final class EstimateScriptsFilesTest extends PluginTestCase {
 
-	private function estimate( int $code_bytes ): Estimate {
+	/**
+	 * An estimate over three tables (65 MB copied in full, 900 MB structure only) and the given code.
+	 *
+	 * @param int        $code_packed Code once zipped.
+	 * @param bool       $inactive    Whether inactive plugins are copied.
+	 * @param array|null $cached      Stored measurement for get( false ); null when there is none.
+	 * @return Estimate
+	 */
+	private function estimate( int $code_packed, bool $inactive = false, ?array $cached = array() ): Estimate {
 		$database = Mockery::mock( Database::class );
 		$database->shouldReceive( 'plan' )->andReturn(
 			array(
@@ -48,41 +56,111 @@ final class EstimateScriptsFilesTest extends PluginTestCase {
 				),
 			)
 		);
-		$code = Mockery::mock( Code::class );
-		$code->shouldReceive( 'size' )->andReturn( $code_bytes );
+		$measurement = array(
+			'bytes'    => 4 * $code_packed,
+			'packed'   => $code_packed,
+			'files'    => 100,
+			'folders'  => array(
+				array(
+					'name'   => 'plugins/jetpack',
+					'kind'   => 'plugin',
+					'bytes'  => 3 * $code_packed,
+					'packed' => (int) ( 0.7 * $code_packed ),
+				),
+				array(
+					'name'   => 'plugins/forminator',
+					'kind'   => 'plugin',
+					'bytes'  => $code_packed,
+					'packed' => (int) ( 0.3 * $code_packed ),
+				),
+			),
+			'measured' => 1700000000,
+			'key'      => 'k',
+		);
+		$code        = Mockery::mock( Code::class );
+		$code->shouldReceive( 'measure' )->andReturn( $measurement );
+		$code->shouldReceive( 'cached' )->andReturn( null === $cached ? null : $measurement );
+		$code->shouldReceive( 'includes_inactive' )->andReturn( $inactive );
 
 		return new Estimate( $database, $code );
 	}
 
-	public function test_estimate_counts_full_tables_and_code_only(): void {
+	public function test_the_cap_is_compared_with_the_zipped_size_not_the_size_on_disk(): void {
 		$estimate = $this->estimate( 20 * Limits::MB )->get();
 
 		$this->assertSame( 65 * Limits::MB, $estimate['database_bytes'] );
-		$this->assertSame( 85 * Limits::MB, $estimate['total_bytes'] );
+		$this->assertSame( (int) round( 65 * Limits::MB * 0.25 ), $estimate['database_packed'] );
+		$this->assertSame( 80 * Limits::MB, $estimate['code_bytes'] );
+		// 145 MB on disk, the old rule refused it; about 36 MB once zipped.
+		$this->assertSame( 145 * Limits::MB, $estimate['raw_bytes'] );
+		$this->assertSame( $estimate['database_packed'] + 20 * Limits::MB, $estimate['total_bytes'] );
 		$this->assertFalse( $estimate['over_limit'] );
+		$this->assertFalse( $estimate['pending'] );
 		$this->assertSame( '', $estimate['message'] );
 		$this->assertSame( array( 'wp_posts', 'wp_shop' ), array_column( $estimate['biggest'], 'name' ) );
 		$this->assertSame( array( 'wp_events' ), array_column( $estimate['excluded'], 'name' ) );
+		$this->assertSame( array( 'plugins/jetpack', 'plugins/forminator' ), array_column( $estimate['folders'], 'name' ) );
 		$this->assertCount( 3, $estimate['tables'] );
 	}
 
-	public function test_estimate_over_the_cap_names_the_biggest_tables(): void {
+	public function test_over_the_cap_with_code_the_message_names_the_plugin_folders(): void {
+		$estimate = $this->estimate( 150 * Limits::MB, true )->get();
+
+		$this->assertTrue( $estimate['over_limit'] );
+		$this->assertStringContainsString( 'once zipped, and the limit is 100 MB', $estimate['message'] );
+		$this->assertStringContainsString( 'Most of it is plugin and theme code. The biggest are plugins/jetpack (105 MB), plugins/forminator (45 MB).', $estimate['message'] );
+		$this->assertStringContainsString( 'Turn off "Copy inactive plugins too"', $estimate['message'] );
+		$this->assertStringNotContainsString( 'tables', $estimate['message'] );
+
+		$this->assertStringContainsString( 'update_rehearsal_skipped_paths', $this->estimate( 150 * Limits::MB )->get()['message'], 'with inactive plugins already out, it points at the skip list' );
+	}
+
+	public function test_over_the_cap_with_the_database_the_message_names_the_tables(): void {
+		Filters\expectApplied( 'update_rehearsal_pack_ratios' )->andReturn( array( 'database' => 1 ) );
 		$estimate = $this->estimate( 50 * Limits::MB )->get();
 
 		$this->assertTrue( $estimate['over_limit'] );
-		$this->assertStringContainsString( 'about 115 MB, and the limit is 100 MB', $estimate['message'] );
-		$this->assertStringContainsString( 'wp_posts (60 MB), wp_shop (5 MB)', $estimate['message'] );
+		$this->assertStringContainsString( 'Most of it is the database. The biggest tables are wp_posts (60 MB), wp_shop (5 MB).', $estimate['message'] );
+		$this->assertStringContainsString( 'Leave big tables out on the Settings tab', $estimate['message'] );
+	}
+
+	public function test_without_a_stored_measurement_the_screen_estimate_is_pending_and_reads_no_file(): void {
+		$estimate = $this->estimate( 500 * Limits::MB, false, null )->get( false );
+
+		$this->assertTrue( $estimate['pending'] );
+		$this->assertFalse( $estimate['over_limit'], 'pending is never over the limit' );
+		$this->assertSame( 0, $estimate['code_bytes'] );
+		$this->assertSame( array( 'wp_posts', 'wp_shop', 'wp_events' ), array_column( $estimate['tables'], 'name' ), 'the tables are there for the Settings tab' );
 	}
 
 	public function test_the_cap_filter(): void {
 		Filters\expectApplied( 'update_rehearsal_bundle_max_bytes' )->once()->andReturn( 200 * Limits::MB );
-		$this->assertFalse( $this->estimate( 50 * Limits::MB )->get()['over_limit'] );
+		$this->assertFalse( $this->estimate( 150 * Limits::MB )->get()['over_limit'] );
 	}
 
 	public function test_the_over_limit_message_filter(): void {
 		Filters\expectApplied( 'update_rehearsal_over_limit_message' )->twice()->with( Mockery::type( 'string' ), Mockery::type( 'array' ) )->andReturn( 'Ask Sam to trim the shop tables.', '' );
-		$this->assertSame( 'Ask Sam to trim the shop tables.', $this->estimate( 50 * Limits::MB )->get()['message'] );
-		$this->assertStringContainsString( 'too big to rehearse', $this->estimate( 50 * Limits::MB )->get()['message'], 'an empty message falls back' );
+		$this->assertSame( 'Ask Sam to trim the shop tables.', $this->estimate( 150 * Limits::MB )->get()['message'] );
+		$this->assertStringContainsString( 'too big to rehearse', $this->estimate( 150 * Limits::MB )->get()['message'], 'an empty message falls back' );
+	}
+
+	public function test_pack_ratios_are_clamped_and_keep_their_fallbacks(): void {
+		Filters\expectApplied( 'update_rehearsal_pack_ratios' )->once()->andReturn(
+			array(
+				'PHP'  => 0.4,
+				'png'  => 7,
+				'svg'  => -1,
+				'bad'  => 'x',
+			)
+		);
+		$ratios = Limits::pack_ratios();
+
+		$this->assertSame( 0.4, $ratios['php'] );
+		$this->assertSame( 1.0, $ratios['png'] );
+		$this->assertSame( 0.01, $ratios['svg'] );
+		$this->assertArrayNotHasKey( 'bad', $ratios );
+		$this->assertSame( 0.25, $ratios['database'] );
+		$this->assertSame( 0.5, $ratios['default'] );
 	}
 
 	public function test_the_playground_scripts_are_valid_php(): void {

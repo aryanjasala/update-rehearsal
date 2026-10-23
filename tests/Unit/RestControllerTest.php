@@ -107,8 +107,21 @@ final class RestControllerTest extends PluginTestCase {
 	}
 
 	public function test_estimate_and_bundle_callbacks(): void {
-		$this->estimate->shouldReceive( 'get' )->once()->andReturn( array( 'total_bytes' => 5 ) );
-		$this->assertSame( array( 'total_bytes' => 5 ), $this->controller()->get_estimate()->get_data() );
+		$this->estimate->shouldReceive( 'get' )->once()->with( true, true )->andReturn(
+			array(
+				'pending'        => false,
+				'over_limit'     => false,
+				'total_bytes'    => 5,
+				'database_bytes' => 3,
+				'code_bytes'     => 9,
+				'max_bytes'      => 100,
+				'excluded'       => array(),
+				'measured'       => 0,
+			)
+		);
+		$data = $this->controller()->get_estimate( new \WP_REST_Request( array( 'fresh' => true ) ) )->get_data();
+		$this->assertSame( 5, $data['total_bytes'] );
+		$this->assertStringContainsString( 'class="urh-estimate" data-state="ok"', $data['html'] );
 
 		$this->builder->shouldReceive( 'create' )->once()->with(
 			array(

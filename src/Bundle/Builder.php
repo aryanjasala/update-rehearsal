@@ -168,23 +168,24 @@ class Builder {
 		Files::write( $dir . 'files.json', (string) wp_json_encode( $files ) );
 
 		$job = array(
-			'id'          => $id,
-			'user'        => (int) ( $args['user'] ?? get_current_user_id() ),
-			'context'     => $context,
-			'created'     => time(),
-			'phase'       => 'database',
-			'items'       => $items,
-			'php'         => $php,
-			'tables'      => $tables,
-			'table'       => 0,
-			'file'        => 0,
-			'files_total' => count( $files ),
-			'package'     => 0,
-			'parts'       => array(),
-			'sql_bytes'   => 0,
-			'code_bytes'  => 0,
-			'estimate'    => $estimate['total_bytes'],
-			'error'       => '',
+			'id'           => $id,
+			'user'         => (int) ( $args['user'] ?? get_current_user_id() ),
+			'context'      => $context,
+			'created'      => time(),
+			'phase'        => 'database',
+			'items'        => $items,
+			'php'          => $php,
+			'tables'       => $tables,
+			'table'        => 0,
+			'file'         => 0,
+			'files_total'  => count( $files ),
+			'package'      => 0,
+			'parts'        => array(),
+			'sql_bytes'    => 0,
+			'code_bytes'   => 0,
+			'packed_bytes' => 0,
+			'estimate'     => $estimate['total_bytes'],
+			'error'        => '',
 		);
 		$this->save( $job );
 
@@ -404,20 +405,7 @@ class Builder {
 					$job['code_bytes'] += (int) $size;
 					++$count;
 				}
-			}
-
-			if ( $job['sql_bytes'] + $job['code_bytes'] > $max ) {
-				$zip->close();
-				throw new \RuntimeException(
-					esc_html(
-						sprintf(
-							/* translators: %s: size limit. */
-							__( 'The bundle grew past the %s limit while it was built. Leave big tables out on the Settings tab, or raise the limit with the update_rehearsal_bundle_max_bytes filter.', 'update-rehearsal' ),
-							size_format( $max, 1 )
-						)
-					)
-				);
-			}
+			}       
 		}
 
 		if ( '' !== $sql ) {
@@ -426,7 +414,22 @@ class Builder {
 		$entries = $zip->count();
 		$zip->close();
 		if ( $entries > 0 ) {
-			$job['parts'][] = $name;
+			$job['parts'][]      = $name;
+			$job['packed_bytes'] = (int) ( $job['packed_bytes'] ?? 0 ) + (int) filesize( $this->dir( $job['id'] ) . $name );
+		}
+
+		// The cap counts what is sent: the zipped parts, not the files on disk.
+		if ( (int) ( $job['packed_bytes'] ?? 0 ) > $max ) {
+			throw new \RuntimeException(
+				esc_html(
+					sprintf(
+						/* translators: 1: size so far, 2: size limit. */
+						__( 'The copy grew past the limit while it was built: %1$s zipped so far, and the limit is %2$s. Copy active plugins only, leave big tables out on the Settings tab, or raise the limit with the update_rehearsal_bundle_max_bytes filter.', 'update-rehearsal' ),
+						size_format( (int) $job['packed_bytes'], 1 ),
+						size_format( $max, 1 )
+					)
+				)
+			);
 		}
 	}
 
@@ -603,6 +606,7 @@ class Builder {
 			'sizes'          => array(
 				'database' => $job['sql_bytes'],
 				'code'     => $job['code_bytes'],
+				'packed'   => (int) ( $job['packed_bytes'] ?? 0 ),
 			),
 			'files'          => $this->public_files( $job ),
 		);

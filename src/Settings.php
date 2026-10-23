@@ -18,7 +18,7 @@ final class Settings {
 
 	private const DEFAULTS = array(
 		'scrub_users'      => true,
-		'include_inactive' => true,
+		'include_inactive' => false,
 		'include_tables'   => array(),
 		'extra_urls'       => array(),
 		'retention_days'   => 90,
@@ -110,9 +110,10 @@ final class Settings {
 	 */
 	public function include_inactive_plugins(): bool {
 		/**
-		 * Filters whether inactive plugins go into the copy.
+		 * Filters whether inactive plugins go into the copy. They cannot change
+		 * the pages a rehearsal checks, and they often make up most of the code.
 		 *
-		 * @param bool $include Default true, or the setting.
+		 * @param bool $include Default false, or the setting.
 		 */
 		return (bool) apply_filters( 'update_rehearsal_include_inactive_plugins', $this->get( 'include_inactive' ) );
 	}

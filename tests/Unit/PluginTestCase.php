@@ -208,6 +208,29 @@ abstract class PluginTestCase extends TestCase {
 				return $this->transients[ $name ] ?? false;
 			}
 		);
+		Functions\when( 'get_transient' )->alias(
+			function ( $name ) {
+				return $this->transients[ 'transient:' . $name ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			function ( $name, $value ) {
+				$this->transients[ 'transient:' . $name ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'delete_transient' )->alias(
+			function ( $name ) {
+				unset( $this->transients[ 'transient:' . $name ] );
+				return true;
+			}
+		);
+		Functions\when( 'wp_date' )->alias(
+			static function ( $format, $time ) {
+				return gmdate( $format, $time );
+			}
+		);
+		Functions\when( 'is_rtl' )->justReturn( false );
 		Functions\when( 'mysql_to_rfc3339' )->alias(
 			static function ( $date ) {
 				return str_replace( ' ', 'T', (string) $date );

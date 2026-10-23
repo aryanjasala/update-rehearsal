@@ -74,6 +74,13 @@ final class Plugin {
 	private TestUrls $urls;
 
 	/**
+	 * Code collector, which also forgets its measurement when the code changes.
+	 *
+	 * @var Code
+	 */
+	private Code $code;
+
+	/**
 	 * Starts the plugin. Runs on `plugins_loaded`.
 	 */
 	public static function boot(): void {
@@ -101,7 +108,8 @@ final class Plugin {
 		$this->rehearsals = new Rehearsals();
 		$this->urls       = new TestUrls( $this->settings );
 		$database         = new Database( $this->settings );
-		$code             = new Code( $this->settings );
+		$this->code       = new Code( $this->settings );
+		$code             = $this->code;
 		$this->estimate   = new Estimate( $database, $code );
 		$this->builder    = new Builder( $this->settings, $database, $code, $this->updates, $this->estimate, $this->urls );
 	}
@@ -130,6 +138,7 @@ final class Plugin {
 	private function register(): void {
 		$services = array(
 			$this->rehearsals,
+			$this->code,
 			new Cleanup( $this->settings, $this->builder, $this->rehearsals ),
 			new Controller( $this->builder, $this->estimate, $this->rehearsals ),
 			new Page( $this->settings, $this->updates, $this->estimate, $this->rehearsals, $this->urls ),

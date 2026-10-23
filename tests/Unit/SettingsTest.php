@@ -20,7 +20,7 @@ final class SettingsTest extends PluginTestCase {
 		$this->assertSame(
 			array(
 				'scrub_users'      => true,
-				'include_inactive' => true,
+				'include_inactive' => false,
 				'include_tables'   => array(),
 				'extra_urls'       => array(),
 				'retention_days'   => 90,
@@ -88,12 +88,13 @@ final class SettingsTest extends PluginTestCase {
 	public function test_scrub_users_and_inactive_plugins_follow_the_settings_and_their_filters(): void {
 		$settings = new Settings();
 		$this->assertTrue( $settings->scrub_users() );
-		$this->assertTrue( $settings->include_inactive_plugins() );
+		// Inactive plugins stay out unless someone asks: they cannot change the pages checked.
+		$this->assertFalse( $settings->include_inactive_plugins() );
 
 		Filters\expectApplied( 'update_rehearsal_scrub_users' )->once()->with( true )->andReturn( false );
-		Filters\expectApplied( 'update_rehearsal_include_inactive_plugins' )->once()->with( true )->andReturn( 0 );
+		Filters\expectApplied( 'update_rehearsal_include_inactive_plugins' )->once()->with( false )->andReturn( 1 );
 		$this->assertFalse( $settings->scrub_users() );
-		$this->assertFalse( $settings->include_inactive_plugins() );
+		$this->assertTrue( $settings->include_inactive_plugins() );
 	}
 
 	public function test_retention_days_is_filterable_and_at_least_one(): void {
