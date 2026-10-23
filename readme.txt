@@ -30,7 +30,7 @@ What the report shows:
 * **New PHP errors grouped by plugin or theme**, read from the copy's debug.log. An error inside WordPress itself goes to the plugin that called it.
 * **Each page before and after**: HTTP status, response time, new errors, and what changed in the visible text and the page's elements.
 * **A side by side visual compare** of each page, right after the run.
-* **Update for real** links to the normal WordPress update for the same items, and the report downloads as JSON or HTML.
+* **Update for real** links to the normal WordPress update for the same items. Under an amber or red verdict it asks first and names the problems. The report downloads as JSON or HTML.
 
 The Plugins screen shows "Rehearsed 2 hours ago: green" under each update you rehearsed, and the History tab keeps every report.
 
@@ -40,14 +40,15 @@ Free and open source under the GPL. No pro version, no upsells, no ads in wp-adm
 
 * The database, table by table. Transients, login sessions and this plugin's own data stay out. Big tables of other plugins (over 10 MB) and tables that hold sessions or logs go in without their rows, and you can include any of them on the Settings tab.
 * User email addresses and password hashes are replaced with placeholders by default. The rehearsal logs in with a user of its own.
-* The active theme and its parent, the plugins (all of them, or only the active ones), must-use plugins and drop-ins. object-cache.php, advanced-cache.php and db.php stay out, because they would break the copy.
+* The active theme and its parent, the active plugins (inactive ones too if you turn that on), must-use plugins and drop-ins. object-cache.php, advanced-cache.php and db.php stay out, because they would break the copy.
+* Development leftovers stay out: .git, node_modules, .github, top-level tests folders, zip files, and Composer packages a plugin installed for development only.
 * Uploads are not copied. The copy loads images from the live site.
 
 The copy sends no email, runs no scheduled tasks and makes no outgoing requests.
 
 = Size limit =
 
-A copy is capped at 100 MB. The Rehearse tab shows the size first. A site over the limit cannot start a rehearsal, and the message names the tables that make it big, so you can leave them out.
+A copy is capped at 100 MB once zipped, which is what your browser downloads. Code and SQL shrink to about a quarter when zipped, so most sites are far under it. The Rehearse tab shows the size first. Measuring reads every plugin and theme file once, so the size is remembered until plugins or themes change. A site over the limit cannot start a rehearsal, and the message names what makes it big: the plugin and theme folders, or the tables.
 
 = For AI agents =
 

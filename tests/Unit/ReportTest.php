@@ -144,5 +144,11 @@ final class ReportTest extends PluginTestCase {
 		$this->assertSame( 'amber', Report::verdict_label( 'amber' ) );
 		$this->assertSame( 'red', Report::verdict_label( 'red' ) );
 		$this->assertSame( 'failed', Report::verdict_label( '' ) );
+
+		// Badges are sentence case, like the other plugins, not all caps.
+		$this->assertSame( 'Green', Report::verdict_name( 'green' ) );
+		$this->assertSame( 'Amber', Report::verdict_name( 'amber' ) );
+		$this->assertSame( 'Red', Report::verdict_name( 'red' ) );
+		$this->assertSame( 'Failed', Report::verdict_name( '' ) );
 	}
 }

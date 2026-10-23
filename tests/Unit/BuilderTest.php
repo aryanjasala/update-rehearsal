@@ -318,11 +318,30 @@ final class BuilderTest extends PluginTestCase {
 		$zip->close();
 	}
 
-	public function test_the_build_stops_when_it_grows_past_the_cap_and_fires_rehearsal_failed(): void {
+	public function test_the_cap_counts_the_zipped_parts_not_the_bytes_on_disk(): void {
 		Filters\expectApplied( 'update_rehearsal_bundle_max_bytes' )->andReturn( Limits::MB );
+		// 3 MB of SQL that zips to a few kilobytes: over the cap on disk, far under it once zipped.
 		$this->database->shouldReceive( 'export_rows' )->andReturn(
 			array(
-				'sql'    => str_repeat( 'x', Limits::MB + 1 ),
+				'sql'    => str_repeat( "INSERT INTO `wp_posts` VALUES (1,'hello');\n", (int) ( 3 * Limits::MB / 43 ) ),
+				'rows'   => 1,
+				'cursor' => null,
+			)
+		);
+
+		$builder = $this->builder();
+		$state   = $this->finish( $builder, $builder->create( array() ) );
+		$this->assertSame( 'done', $state['phase'], (string) $state['error'] );
+		$this->assertGreaterThan( 3 * Limits::MB - 100, $state['bytes'] );
+		$this->assertLessThan( Limits::MB, array_sum( array_column( $state['files'], 'bytes' ) ) );
+	}
+
+	public function test_the_build_stops_when_it_grows_past_the_cap_and_fires_rehearsal_failed(): void {
+		Filters\expectApplied( 'update_rehearsal_bundle_max_bytes' )->andReturn( Limits::MB );
+		// Random bytes do not shrink when zipped.
+		$this->database->shouldReceive( 'export_rows' )->andReturn(
+			array(
+				'sql'    => random_bytes( Limits::MB + 1024 ),
 				'rows'   => 1,
 				'cursor' => null,
 			)
@@ -339,7 +358,7 @@ final class BuilderTest extends PluginTestCase {
 		$builder = $this->builder();
 		$state   = $this->finish( $builder, $builder->create( array() ) );
 		$this->assertSame( 'failed', $state['phase'] );
-		$this->assertStringContainsString( 'grew past the 1 MB limit', $state['message'] );
+		$this->assertStringContainsString( 'and the limit is 1 MB', $state['message'] );
 	}
 
 	public function test_a_package_that_cannot_be_downloaded_fails_the_build(): void {

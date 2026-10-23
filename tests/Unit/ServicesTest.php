@@ -37,7 +37,7 @@ final class ServicesTest extends PluginTestCase {
 	 * @param bool $over Over the limit.
 	 * @return \Mockery\MockInterface
 	 */
-	private function estimate( bool $over = false ) {
+	private function estimate( bool $over = false, bool $pending = false ) {
 		$estimate = Mockery::mock( Estimate::class );
 		$estimate->shouldReceive( 'get' )->andReturn(
 			array(
@@ -46,6 +46,7 @@ final class ServicesTest extends PluginTestCase {
 				'total_bytes'    => 2097152,
 				'max_bytes'      => 104857600,
 				'over_limit'     => $over,
+				'pending'        => $pending,
 				'threshold'      => 10485760,
 				'tables'         => array(),
 				'biggest'        => array(),
@@ -215,17 +216,33 @@ final class ServicesTest extends PluginTestCase {
 	// Site Health.
 	// -----------------------------------------------------------------
 
-	public function test_site_health_is_good_under_the_limit_and_recommended_over_it(): void {
+	public function test_site_health_never_flags_the_plugins_own_size_limit_as_a_site_problem(): void {
 		$tests = ( new SiteHealth( $this->estimate() ) )->add_test( array() );
 		$this->assertArrayHasKey( 'update_rehearsal', $tests['direct'] );
 
 		$good = ( new SiteHealth( $this->estimate() ) )->run();
 		$this->assertSame( 'good', $good['status'] );
-		$this->assertStringContainsString( 'about 2 MB, under the 100 MB limit', $good['description'] );
+		$this->assertStringContainsString( 'about 2 MB once zipped, under the 100 MB limit', $good['description'] );
 
+		// Over the limit is a note under the passed tests, not a recommendation.
 		$over = ( new SiteHealth( $this->estimate( true ) ) )->run();
-		$this->assertSame( 'recommended', $over['status'] );
+		$this->assertSame( 'good', $over['status'] );
+		$this->assertStringContainsString( 'over its size limit', $over['label'] );
 		$this->assertStringContainsString( 'Too big to rehearse.', $over['description'] );
+	}
+
+	public function test_site_health_never_measures_the_code_itself(): void {
+		$estimate = Mockery::mock( Estimate::class );
+		$estimate->shouldReceive( 'get' )->once()->with( false )->andReturn(
+			array(
+				'pending'    => true,
+				'over_limit' => false,
+			)
+		);
+
+		$result = ( new SiteHealth( $estimate ) )->run();
+		$this->assertSame( 'good', $result['status'] );
+		$this->assertStringContainsString( 'measured the first time you open Update Rehearsal', $result['description'] );
 	}
 
 	public function test_site_health_flags_a_work_folder_that_is_not_writable(): void {
@@ -404,10 +421,40 @@ final class ServicesTest extends PluginTestCase {
 		$this->page()->save_settings();
 	}
 
+	public function test_the_size_box_says_estimating_until_the_code_is_measured(): void {
+		$pending = Page::estimate_html(
+			array(
+				'pending'    => true,
+				'over_limit' => false,
+			)
+		);
+		$this->assertStringContainsString( 'data-state="pending"', $pending );
+		$this->assertStringContainsString( 'Estimating the size of the copy...', $pending );
+
+		$over = Page::estimate_html(
+			array(
+				'pending'        => false,
+				'over_limit'     => true,
+				'total_bytes'    => 120 * 1048576,
+				'database_bytes' => 9 * 1048576,
+				'code_bytes'     => 400 * 1048576,
+				'max_bytes'      => 100 * 1048576,
+				'message'        => 'Most of it is plugin and theme code.',
+				'excluded'       => array(),
+				'measured'       => time() - 7200,
+			)
+		);
+		$this->assertStringContainsString( 'data-state="over"', $over );
+		$this->assertStringContainsString( 'About 120 MB to send once zipped: the database is 9 MB and the code 400 MB on disk. The limit is 100 MB.', $over );
+		$this->assertStringContainsString( 'Most of it is plugin and theme code.', $over );
+		$this->assertStringContainsString( 'Code measured 2 hours ago.', $over );
+		$this->assertStringContainsString( 'urh-remeasure', $over );
+	}
+
 	public function test_type_label(): void {
 		$this->assertSame( 'Plugin', Page::type_label( 'plugin' ) );
 		$this->assertSame( 'Theme', Page::type_label( 'theme' ) );
-		$this->assertSame( 'WordPress', Page::type_label( 'core' ) );
+		$this->assertSame( 'WordPress core', Page::type_label( 'core' ) );
 	}
 
 	public function test_capability_filter_reaches_the_menu(): void {

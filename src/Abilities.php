@@ -90,7 +90,11 @@ final class Abilities implements Service {
 				'title'    => array( 'type' => 'string' ),
 				'date'     => array(
 					'type'        => 'string',
-					'description' => 'ISO 8601, UTC.',
+					'description' => 'ISO 8601, UTC, with the zone.',
+				),
+				'when'     => array(
+					'type'        => 'string',
+					'description' => 'The same time in the site\'s date and time format and time zone.',
 				),
 				'user'     => array( 'type' => 'string' ),
 				'verdict'  => array(
@@ -175,7 +179,7 @@ final class Abilities implements Service {
 		$this->ability(
 			'get-bundle-estimate',
 			__( 'Get the rehearsal bundle size', 'update-rehearsal' ),
-			__( 'How big a copy of this site would be (database and code), the size limit, whether the site is over it, the biggest tables, and the tables copied without their rows.', 'update-rehearsal' ),
+			__( 'How big a copy of this site would be once zipped (database and code), the size limit, whether the site is over it, the biggest tables and plugin or theme folders, and the tables copied without their rows.', 'update-rehearsal' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(),
@@ -185,16 +189,26 @@ final class Abilities implements Service {
 			array(
 				'type'       => 'object',
 				'properties' => array(
-					'database_bytes' => array( 'type' => 'integer' ),
-					'code_bytes'     => array( 'type' => 'integer' ),
-					'total_bytes'    => array( 'type' => 'integer' ),
-					'max_bytes'      => array( 'type' => 'integer' ),
-					'over_limit'     => array( 'type' => 'boolean' ),
-					'threshold'      => array( 'type' => 'integer' ),
-					'tables'         => array( 'type' => 'array' ),
-					'biggest'        => array( 'type' => 'array' ),
-					'excluded'       => array( 'type' => 'array' ),
-					'message'        => array( 'type' => 'string' ),
+					'database_bytes'  => array( 'type' => 'integer' ),
+					'database_packed' => array( 'type' => 'integer' ),
+					'code_bytes'      => array( 'type' => 'integer' ),
+					'code_packed'     => array( 'type' => 'integer' ),
+					'raw_bytes'       => array(
+						'type'        => 'integer',
+						'description' => 'Database and code on disk.',
+					),
+					'total_bytes'     => array(
+						'type'        => 'integer',
+						'description' => 'Estimated size once zipped, which is what the limit counts.',
+					),
+					'max_bytes'       => array( 'type' => 'integer' ),
+					'over_limit'      => array( 'type' => 'boolean' ),
+					'folders'         => array( 'type' => 'array' ),
+					'threshold'       => array( 'type' => 'integer' ),
+					'tables'          => array( 'type' => 'array' ),
+					'biggest'         => array( 'type' => 'array' ),
+					'excluded'        => array( 'type' => 'array' ),
+					'message'         => array( 'type' => 'string' ),
 				),
 			),
 			array( $this, 'get_bundle_estimate' ),

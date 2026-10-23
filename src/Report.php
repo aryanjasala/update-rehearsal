@@ -187,9 +187,28 @@ final class Report {
 	}
 
 	/**
-	 * A verdict in words.
+	 * A verdict on its own, for a badge: Green, Amber, Red or Failed.
 	 *
 	 * @param string $verdict green, amber, red or '' for a failed run.
+	 * @return string
+	 */
+	public static function verdict_name( string $verdict ): string {
+		switch ( $verdict ) {
+			case 'green':
+				return __( 'Green', 'update-rehearsal' );
+			case 'amber':
+				return __( 'Amber', 'update-rehearsal' );
+			case 'red':
+				return __( 'Red', 'update-rehearsal' );
+			default:
+				return __( 'Failed', 'update-rehearsal' );
+		}
+	}
+
+	/**
+	 * A verdict in words, for the middle of a sentence: green, amber, red or failed.
+	 *
+	 * @param string $verdict green, amber, red, or '' for a rehearsal that failed.
 	 * @return string
 	 */
 	public static function verdict_label( string $verdict ): string {

@@ -497,6 +497,44 @@
 	}
 
 	/**
+	 * What the Changes column says about a page. A status that changed, or an
+	 * error page, comes first: a page that went from 200 to 500 never reads
+	 * "no changes", even though its HTML was not compared.
+	 *
+	 * @param {Object} url Page result: compare, before and after (status), diff.
+	 * @return {{kind: string, before: number, after: number}} kind is broke, status, error, not_compared, changed or none.
+	 */
+	function changeSummary( url ) {
+		const page = url || {};
+		const before = Number( ( page.before && page.before.status ) || 0 );
+		const after = Number( ( page.after && page.after.status ) || 0 );
+		let kind = 'none';
+		if ( before !== after ) {
+			kind = after >= 500 || after === 0 ? 'broke' : 'status';
+		} else if ( after >= 500 ) {
+			kind = 'error';
+		} else if ( page.compare === false ) {
+			kind = 'not_compared';
+		} else if ( page.diff && page.diff.changed ) {
+			kind = 'changed';
+		}
+		return { kind, before, after };
+	}
+
+	/**
+	 * Whether "Update for real" should ask first, and what to name.
+	 *
+	 * @param {string}   verdictName green, amber, red or failed.
+	 * @param {string[]} reasons     The reasons in words.
+	 * @return {{required: boolean, level: string, reasons: string[], more: number}} level is red or amber.
+	 */
+	function updateConfirm( verdictName, reasons ) {
+		const list = ( reasons || [] ).filter( ( reason ) => typeof reason === 'string' && reason !== '' );
+		const required = verdictName === 'red' || verdictName === 'amber';
+		return { required, level: required ? verdictName : '', reasons: list.slice( 0, 5 ), more: Math.max( 0, list.length - 5 ) };
+	}
+
+	/**
 	 * The overall verdict: the worst page decides.
 	 *
 	 * @param {Object[]} results Page results.
@@ -646,6 +684,8 @@
 		newErrors,
 		isBlank,
 		compareUrl,
+		changeSummary,
+		updateConfirm,
 		verdict,
 		collectErrors,
 		summariseSources,

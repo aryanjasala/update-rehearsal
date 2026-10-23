@@ -82,6 +82,9 @@ final class Command {
 	 *
 	 * ## OPTIONS
 	 *
+	 * [--fresh]
+	 * : Measure the plugin and theme code again instead of using the stored size.
+	 *
 	 * [--format=<format>]
 	 * : table lists the tables, json and yaml give the whole estimate.
 	 * ---
@@ -96,13 +99,13 @@ final class Command {
 	 * ## EXAMPLES
 	 *
 	 *     wp update-rehearsal estimate
-	 *     wp update-rehearsal estimate --format=json
+	 *     wp update-rehearsal estimate --fresh --format=json
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Named arguments.
 	 */
 	public function estimate( array $args, array $assoc_args ): void {
-		$estimate = $this->estimate->get();
+		$estimate = $this->estimate->get( true, ! empty( $assoc_args['fresh'] ) );
 		$format   = (string) ( $assoc_args['format'] ?? 'table' );
 		if ( in_array( $format, array( 'json', 'yaml' ), true ) ) {
 			\WP_CLI\Utils\format_items( $format, array( $estimate ), array_keys( $estimate ) );
@@ -120,7 +123,7 @@ final class Command {
 		}
 		\WP_CLI\Utils\format_items( $format, $rows, array( 'table', 'rows', 'size', 'copy' ) );
 
-		$line = sprintf( 'Database %s, code %s, about %s in total. Limit %s.', size_format( $estimate['database_bytes'], 1 ), size_format( $estimate['code_bytes'], 1 ), size_format( $estimate['total_bytes'], 1 ), size_format( $estimate['max_bytes'], 1 ) );
+		$line = sprintf( 'Database %s and code %s on disk, about %s once zipped. Limit %s.', size_format( $estimate['database_bytes'], 1 ), size_format( $estimate['code_bytes'], 1 ), size_format( $estimate['total_bytes'], 1 ), size_format( $estimate['max_bytes'], 1 ) );
 		if ( 'table' === $format ) {
 			if ( $estimate['over_limit'] ) {
 				\WP_CLI::warning( $line . ' ' . $estimate['message'] );

@@ -7,6 +7,7 @@
 
 namespace AryanX\UpdateRehearsal\Rest;
 
+use AryanX\UpdateRehearsal\Admin\Page;
 use AryanX\UpdateRehearsal\Bundle\Builder;
 use AryanX\UpdateRehearsal\Bundle\Estimate;
 use AryanX\UpdateRehearsal\Bundle\Files;
@@ -80,6 +81,12 @@ final class Controller implements Service {
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_estimate' ),
 				'permission_callback' => $can,
+				'args'                => array(
+					'fresh' => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
+				),
 			)
 		);
 		register_rest_route(
@@ -202,12 +209,17 @@ final class Controller implements Service {
 	}
 
 	/**
-	 * GET /estimate
+	 * GET /estimate: measures the code when needed (or again, with fresh), and
+	 * returns the size box as HTML for the screen too.
 	 *
+	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response
 	 */
-	public function get_estimate() {
-		return rest_ensure_response( $this->estimate->get() );
+	public function get_estimate( $request ) {
+		$estimate         = $this->estimate->get( true, (bool) $request->get_param( 'fresh' ) );
+		$estimate['html'] = Page::estimate_html( $estimate );
+
+		return rest_ensure_response( $estimate );
 	}
 
 	/**

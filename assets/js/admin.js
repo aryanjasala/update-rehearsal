@@ -9,8 +9,10 @@
  * - filter updateRehearsal.testUrls( urls, context )
  * - filter updateRehearsal.normaliseHtml( html, context )
  * - filter updateRehearsal.blueprintSteps( steps, context )
+ * - filter updateRehearsal.confirmUpdate( ask, context ): whether "Update for real" asks first
  * - action updateRehearsal.stepFinished( step, context )
  * - action updateRehearsal.finished( report, context )
+ * - action updateRehearsal.estimated( estimate )
  */
 ( function () {
 	'use strict';
@@ -66,11 +68,21 @@
 		return el;
 	}
 
+	// Badges in sentence case, like the other screens.
 	const VERDICT_WORDS = {
-		green: () => __( 'green', 'update-rehearsal' ),
-		amber: () => __( 'amber', 'update-rehearsal' ),
-		red: () => __( 'red', 'update-rehearsal' ),
-		failed: () => __( 'failed', 'update-rehearsal' ),
+		green: () => __( 'Green', 'update-rehearsal' ),
+		amber: () => __( 'Amber', 'update-rehearsal' ),
+		red: () => __( 'Red', 'update-rehearsal' ),
+		failed: () => __( 'Failed', 'update-rehearsal' ),
+	};
+
+	const SOURCE_WORDS = {
+		plugin: () => __( 'Plugin', 'update-rehearsal' ),
+		theme: () => __( 'Theme', 'update-rehearsal' ),
+		'mu-plugin': () => __( 'Must-use plugin', 'update-rehearsal' ),
+		'drop-in': () => __( 'Drop-in', 'update-rehearsal' ),
+		core: () => __( 'WordPress core', 'update-rehearsal' ),
+		other: () => __( 'Other', 'update-rehearsal' ),
 	};
 
 	const LEVEL_WORDS = {
@@ -669,7 +681,8 @@
 			{ className: 'urh-meta' },
 			h( 'dt', null, __( 'Rehearsed', 'update-rehearsal' ) ),
 			h( 'dd', null, items.join( ', ' ) || '-' ),
-			stored.date ? [ h( 'dt', null, __( 'When', 'update-rehearsal' ) ), h( 'dd', null, new Date( stored.date ).toLocaleString() + ( stored.user ? ' (' + stored.user + ')' : '' ) ) ] : null,
+			// The server formats the time in the site's own format and time zone.
+			stored.date ? [ h( 'dt', null, __( 'When', 'update-rehearsal' ) ), h( 'dd', null, h( 'time', { datetime: stored.date }, stored.when || stored.date ), stored.user ? ' (' + stored.user + ')' : '' ) ] : null,
 			report.duration ? [ h( 'dt', null, __( 'Took', 'update-rehearsal' ) ), h( 'dd', null, sprintf( /* translators: %d: seconds. */ __( '%d seconds', 'update-rehearsal' ), Math.round( report.duration / 1000 ) ) ) ] : null,
 			report.bundle && report.bundle.bytes ? [ h( 'dt', null, __( 'Copy size', 'update-rehearsal' ) ), h( 'dd', null, core.formatBytes( report.bundle.bytes ) ) ] : null
 		);
@@ -685,16 +698,23 @@
 	 */
 	function actions( stored, report, body ) {
 		const links = [];
+		const holder = h( 'div', { className: 'urh-confirm-holder' } );
 		( report.items || [] ).forEach( ( item ) => {
 			const pending = ( config.updates || [] ).find( ( update ) => update.key === item.key && update.to === item.to );
 			if ( pending && report.status !== 'failed' ) {
-				links.push(
-					h(
-						'a',
-						{ className: 'button' + ( stored.verdict === 'green' ? ' button-primary' : '' ) + ' urh-update-real', href: pending.updateUrl },
-						sprintf( /* translators: %s: plugin, theme or WordPress. */ __( 'Update %s for real', 'update-rehearsal' ), item.name )
-					)
+				const link = h(
+					'a',
+					{ className: 'button' + ( stored.verdict === 'green' ? ' button-primary' : '' ) + ' urh-update-real', href: pending.updateUrl },
+					sprintf( /* translators: %s: plugin, theme or WordPress. */ __( 'Update %s for real', 'update-rehearsal' ), item.name )
 				);
+				link.addEventListener( 'click', ( event ) => {
+					const ask = hooks().applyFilters( 'updateRehearsal.confirmUpdate', core.updateConfirm( stored.verdict, report.reasons ), { item, stored } );
+					if ( ask && ask.required ) {
+						event.preventDefault();
+						confirmUpdate( holder, link, item, ask );
+					}
+				} );
+				links.push( link );
 			}
 		} );
 		const name = 'update-rehearsal-' + ( stored.id || 'report' );
@@ -705,7 +725,53 @@
 		if ( report.php && report.php.to !== report.php.from && report.status !== 'failed' ) {
 			links.push( h( 'span', { className: 'description' }, __( 'Your host changes the PHP version, usually from its control panel.', 'update-rehearsal' ) ) );
 		}
-		return h( 'p', { className: 'urh-actions' }, links );
+		return h( 'div', null, h( 'p', { className: 'urh-actions' }, links ), holder );
+	}
+
+	/**
+	 * Asks before a real update the rehearsal found problems with, naming them.
+	 *
+	 * @param {HTMLElement} holder Where the question goes.
+	 * @param {HTMLElement} link   The "Update for real" link, which gets focus back on Cancel.
+	 * @param {Object}      item   The update.
+	 * @param {Object}      ask    level (red or amber), reasons, more.
+	 */
+	function confirmUpdate( holder, link, item, ask ) {
+		const title =
+			ask.level === 'red'
+				? sprintf( /* translators: %s: plugin, theme or WordPress. */ __( 'This update broke the copy. Update %s anyway?', 'update-rehearsal' ), item.name )
+				: sprintf( /* translators: %s: plugin, theme or WordPress. */ __( 'Something changed in the copy. Update %s anyway?', 'update-rehearsal' ), item.name );
+		const close = () => {
+			holder.textContent = '';
+			link.focus();
+		};
+		const box = h(
+			'div',
+			{ className: 'notice inline urh-confirm urh-confirm-' + ask.level, role: 'alertdialog', 'aria-labelledby': 'urh-confirm-title', 'aria-describedby': 'urh-confirm-reasons', tabindex: '-1' },
+			h( 'p', { id: 'urh-confirm-title' }, h( 'strong', null, title ) ),
+			h(
+				'ul',
+				{ id: 'urh-confirm-reasons', className: 'urh-reasons' },
+				( ask.reasons || [] ).map( ( reason ) => h( 'li', null, reason ) ),
+				ask.more ? h( 'li', null, sprintf( /* translators: %d: number of other problems. */ __( 'and %d more', 'update-rehearsal' ), ask.more ) ) : null
+			),
+			h(
+				'p',
+				{ className: 'urh-confirm-actions' },
+				h( 'a', { className: 'button urh-confirm-yes', href: link.getAttribute( 'href' ) }, __( 'Update anyway', 'update-rehearsal' ) ),
+				' ',
+				h( 'button', { type: 'button', className: 'button button-primary urh-confirm-no', onClick: close }, __( 'Cancel', 'update-rehearsal' ) )
+			)
+		);
+		box.addEventListener( 'keydown', ( event ) => {
+			if ( event.key === 'Escape' ) {
+				event.preventDefault();
+				close();
+			}
+		} );
+		holder.textContent = '';
+		holder.append( box );
+		box.focus();
 	}
 
 	/**
@@ -724,6 +790,9 @@
 			null,
 			h( 'h3', null, __( 'New PHP errors by plugin or theme', 'update-rehearsal' ) ),
 			h(
+				'div',
+				{ className: 'urh-table-scroll' },
+				h(
 				'table',
 				{ className: 'widefat striped urh-sources' },
 				h( 'thead', null, h( 'tr', null, [ __( 'Source', 'update-rehearsal' ), __( 'Fatal', 'update-rehearsal' ), __( 'Warnings', 'update-rehearsal' ), __( 'Notices', 'update-rehearsal' ), __( 'Deprecations', 'update-rehearsal' ) ].map( ( label ) => h( 'th', { scope: 'col' }, label ) ) ) ),
@@ -734,13 +803,14 @@
 						h(
 							'tr',
 							{ className: source.fatal ? 'urh-row-red' : '' },
-							h( 'td', null, h( 'strong', null, source.name || source.slug || __( 'Unknown', 'update-rehearsal' ) ), ' ', h( 'span', { className: 'urh-type' }, source.type ) ),
+							h( 'td', null, h( 'strong', null, source.name || source.slug || __( 'Unknown', 'update-rehearsal' ) ), ' ', h( 'span', { className: 'urh-type' }, ( SOURCE_WORDS[ source.type ] || SOURCE_WORDS.other )() ) ),
 							h( 'td', null, source.fatal ),
 							h( 'td', null, source.warning ),
 							h( 'td', null, source.notice ),
 							h( 'td', null, source.deprecated )
 						)
 					)
+				)
 				)
 			)
 		);
@@ -788,12 +858,16 @@
 		if ( ! urls.length ) {
 			return null;
 		}
-		const time = ( side ) => ( side.status ? side.status + ' · ' + side.ms + ' ms' : '-' );
+		// Isolated, so a right-to-left page keeps "200 · 211 ms" in order.
+		const time = ( side ) => ( side.status ? h( 'bdi', null, sprintf( /* translators: 1: HTTP status, 2: milliseconds. */ __( '%1$d · %2$d ms', 'update-rehearsal' ), side.status, side.ms ) ) : '-' );
 		return h(
 			'div',
 			null,
 			h( 'h3', null, __( 'Pages', 'update-rehearsal' ) ),
 			h(
+				'div',
+				{ className: 'urh-table-scroll' },
+				h(
 				'table',
 				{ className: 'widefat striped urh-pages-table' },
 				h(
@@ -819,6 +893,7 @@
 						);
 					} )
 				)
+				)
 			)
 		);
 	}
@@ -831,11 +906,18 @@
 	 * @return {HTMLElement|string} Details or a dash.
 	 */
 	function changes( diff, url ) {
-		if ( ! url.compare ) {
-			return h( 'span', { className: 'urh-muted' }, __( 'Not compared', 'update-rehearsal' ) );
-		}
-		if ( ! diff.changed ) {
-			return __( 'None', 'update-rehearsal' );
+		const summary = core.changeSummary( url );
+		switch ( summary.kind ) {
+			case 'broke':
+				return h( 'strong', { className: 'urh-broke' }, sprintf( /* translators: 1: HTTP status before, 2: HTTP status after. */ __( 'Page broke: %1$d to %2$d', 'update-rehearsal' ), summary.before, summary.after ) );
+			case 'status':
+				return h( 'strong', null, sprintf( /* translators: 1: HTTP status before, 2: HTTP status after. */ __( 'Status changed: %1$d to %2$d', 'update-rehearsal' ), summary.before, summary.after ) );
+			case 'error':
+				return h( 'span', { className: 'urh-muted' }, __( 'Error page before and after, not compared', 'update-rehearsal' ) );
+			case 'not_compared':
+				return h( 'span', { className: 'urh-muted' }, __( 'Not compared', 'update-rehearsal' ) );
+			case 'none':
+				return __( 'None', 'update-rehearsal' );
 		}
 		const list = ( label, lines, className ) =>
 			lines && lines.length ? [ h( 'p', null, h( 'strong', null, label ) ), h( 'ul', { className }, lines.map( ( line ) => h( 'li', null, line ) ) ) ] : null;
@@ -872,29 +954,76 @@
 	/**
 	 * Shows the page before and after side by side, in sandboxed frames with no scripts.
 	 *
+	 * A modal dialog: focus moves in, Tab stays in, Escape closes, and focus
+	 * goes back to the button that opened it. The rest of the screen is inert
+	 * while it is open.
+	 *
 	 * @param {Object} url     Page result.
 	 * @param {Object} preview before, after HTML.
 	 */
 	function openCompare( url, preview ) {
 		const old = document.querySelector( '.urh-compare' );
-		if ( old ) {
-			old.remove();
+		if ( old && old.urhClose ) {
+			old.urhClose( false );
 		}
-		const frame = ( label, html ) => h( 'figure', null, h( 'figcaption', null, label ), h( 'iframe', { sandbox: '', srcdoc: html, title: label } ) );
+		const opener = document.activeElement;
+		const page = document.getElementById( 'wpwrap' );
+		// The frames stay out of the Tab order: keys pressed inside a sandboxed frame never reach this page, so Escape would stop working there.
+		const frame = ( label, html ) => h( 'figure', null, h( 'figcaption', null, label ), h( 'iframe', { sandbox: '', srcdoc: html, title: label, tabindex: '-1' } ) );
+		const closeButton = h( 'button', { type: 'button', className: 'button urh-compare-close' }, __( 'Close', 'update-rehearsal' ) );
 		const box = h(
 			'div',
-			{ className: 'urh-compare', role: 'dialog', 'aria-label': __( 'Visual compare', 'update-rehearsal' ) },
+			{ className: 'urh-compare', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'urh-compare-title', 'aria-describedby': 'urh-compare-note' },
 			h(
 				'div',
 				{ className: 'urh-compare-head' },
-				h( 'strong', null, url.path ),
-				' ',
-				h( 'span', { className: 'urh-muted' }, __( 'Best effort: scripts are off, and images, styles and fonts come from the live site, so the page can look different from the real thing.', 'update-rehearsal' ) ),
-				h( 'button', { type: 'button', className: 'button urh-compare-close', onClick: () => box.remove() }, __( 'Close', 'update-rehearsal' ) )
+				h( 'h2', { id: 'urh-compare-title', className: 'urh-compare-title' }, sprintf( /* translators: %s: page path. */ __( 'Visual compare: %s', 'update-rehearsal' ), url.path ) ),
+				h( 'span', { id: 'urh-compare-note', className: 'urh-muted' }, __( 'Best effort: scripts are off, and images, styles and fonts come from the live site, so the page can look different from the real thing.', 'update-rehearsal' ) ),
+				closeButton
 			),
 			h( 'div', { className: 'urh-compare-frames' }, frame( __( 'Before', 'update-rehearsal' ), preview.before ), frame( __( 'After', 'update-rehearsal' ), preview.after ) )
 		);
+		const focusable = () => Array.from( box.querySelectorAll( 'button, a[href], [tabindex]:not([tabindex="-1"])' ) );
+		const onKey = ( event ) => {
+			if ( event.key === 'Escape' ) {
+				event.preventDefault();
+				close( true );
+			} else if ( event.key === 'Tab' ) {
+				const items = focusable();
+				const first = items[ 0 ];
+				const last = items[ items.length - 1 ];
+				if ( event.shiftKey && document.activeElement === first ) {
+					event.preventDefault();
+					last.focus();
+				} else if ( ! event.shiftKey && document.activeElement === last ) {
+					event.preventDefault();
+					first.focus();
+				} else if ( ! box.contains( document.activeElement ) ) {
+					event.preventDefault();
+					first.focus();
+				}
+			}
+		};
+		function close( restore ) {
+			document.removeEventListener( 'keydown', onKey, true );
+			box.remove();
+			if ( page ) {
+				page.inert = false;
+				page.removeAttribute( 'aria-hidden' );
+			}
+			if ( restore && opener && typeof opener.focus === 'function' ) {
+				opener.focus();
+			}
+		}
+		box.urhClose = close;
+		closeButton.addEventListener( 'click', () => close( true ) );
+		document.addEventListener( 'keydown', onKey, true );
 		document.body.append( box );
+		if ( page ) {
+			page.inert = true;
+			page.setAttribute( 'aria-hidden', 'true' );
+		}
+		closeButton.focus();
 	}
 
 	/**
@@ -966,15 +1095,63 @@
 	}
 
 	/**
-	 * Turns Start on when there is something to rehearse.
+	 * Turns Start on when there is something to rehearse and the size is known and under the limit.
 	 */
 	function refreshStart() {
 		const start = document.getElementById( 'urh-start' );
-		if ( ! start || start.dataset.urhLocked ) {
+		const box = document.querySelector( '.urh-estimate' );
+		if ( ! start ) {
 			return;
 		}
+		const state = box ? box.getAttribute( 'data-state' ) : 'ok';
 		const chosen = selection();
-		start.disabled = ! chosen.items.length && ! chosen.php;
+		start.disabled = state === 'over' || state === 'pending' || ( ! chosen.items.length && ! chosen.php );
+	}
+
+	/**
+	 * Asks the server for the size of the copy, measuring the code if needed, and shows it.
+	 *
+	 * The screen itself never reads every plugin file: it shows the stored size,
+	 * or "Estimating" while this runs.
+	 *
+	 * Hooks: action updateRehearsal.estimated( estimate ).
+	 *
+	 * @param {boolean} fresh Measure again even when a size is stored.
+	 * @return {Promise<Object|null>} The estimate.
+	 */
+	async function loadEstimate( fresh ) {
+		let box = document.querySelector( '.urh-estimate' );
+		if ( ! box ) {
+			return null;
+		}
+		if ( fresh || box.getAttribute( 'data-state' ) !== 'pending' ) {
+			const pending = h(
+				'div',
+				{ className: 'urh-estimate urh-estimate-pending', 'data-state': 'pending', 'aria-busy': 'true' },
+				h( 'p', null, h( 'span', { className: 'spinner is-active' } ), ' ', __( 'Estimating the size of the copy...', 'update-rehearsal' ) )
+			);
+			box.replaceWith( pending );
+			box = pending;
+		}
+		refreshStart();
+		try {
+			const estimate = await rest( '/estimate' + ( fresh ? '?fresh=1' : '' ) );
+			const holder = document.createElement( 'div' );
+			holder.innerHTML = estimate.html;
+			box.replaceWith( holder.firstElementChild );
+			refreshStart();
+			hooks().doAction( 'updateRehearsal.estimated', estimate );
+			return estimate;
+		} catch ( error ) {
+			const failed = h(
+				'div',
+				{ className: 'urh-estimate', 'data-state': 'unknown' },
+				h( 'p', null, sprintf( /* translators: %s: error message. */ __( 'The size of the copy could not be measured: %s The rehearsal checks it again when it starts.', 'update-rehearsal' ), ( error && error.message ) || '' ) )
+			);
+			box.replaceWith( failed );
+			refreshStart();
+			return null;
+		}
 	}
 
 	function init() {
@@ -988,15 +1165,21 @@
 		if ( ! start ) {
 			return;
 		}
-		if ( start.disabled ) {
-			start.dataset.urhLocked = '1';
-		}
 		document.querySelectorAll( 'input[name="urh_items[]"], #urh-php' ).forEach( ( input ) => input.addEventListener( 'change', refreshStart ) );
+		document.addEventListener( 'click', ( event ) => {
+			if ( event.target && event.target.closest && event.target.closest( '.urh-remeasure' ) ) {
+				loadEstimate( true );
+			}
+		} );
 		refreshStart();
+		const box = document.querySelector( '.urh-estimate' );
+		if ( box && box.getAttribute( 'data-state' ) === 'pending' ) {
+			loadEstimate( false );
+		}
 		start.addEventListener( 'click', () => run( selection() ) );
 	}
 
-	window.updateRehearsal = { config, testUrls, run, renderReport, selection };
+	window.updateRehearsal = { config, testUrls, run, renderReport, selection, loadEstimate };
 
 	if ( document.readyState === 'loading' ) {
 		document.addEventListener( 'DOMContentLoaded', init );

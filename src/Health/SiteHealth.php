@@ -80,13 +80,19 @@ final class SiteHealth implements Service {
 			return $this->result( 'recommended', __( 'Update rehearsals cannot build a copy of the site', 'update-rehearsal' ), sprintf( __( 'The work folder %s is not writable. Point the update_rehearsal_work_dir filter at a folder PHP can write to.', 'update-rehearsal' ), $dir ), '' );
 		}
 
-		$estimate = $this->estimate->get();
+		// Only a stored measurement: Site Health never waits for every plugin file to be read.
+		$estimate = $this->estimate->get( false );
+		if ( $estimate['pending'] ) {
+			return $this->result( 'good', __( 'Updates can be rehearsed on a copy of this site', 'update-rehearsal' ), __( 'The size of the copy is measured the first time you open Update Rehearsal.', 'update-rehearsal' ), $action );
+		}
+
+		// Over the size limit is a limit of this plugin, not a problem with the site, so it is a note under the passed tests.
 		if ( $estimate['over_limit'] ) {
-			return $this->result( 'recommended', __( 'This site is too big to rehearse updates', 'update-rehearsal' ), $estimate['message'], $action );
+			return $this->result( 'good', __( 'Update Rehearsal is set up, but this site is over its size limit', 'update-rehearsal' ), $estimate['message'], $action );
 		}
 
 		/* translators: 1: estimated size, 2: limit. */
-		return $this->result( 'good', __( 'Updates can be rehearsed on a copy of this site', 'update-rehearsal' ), sprintf( __( 'A copy of this site is about %1$s, under the %2$s limit.', 'update-rehearsal' ), size_format( $estimate['total_bytes'], 1 ), size_format( $estimate['max_bytes'], 1 ) ), $action );
+		return $this->result( 'good', __( 'Updates can be rehearsed on a copy of this site', 'update-rehearsal' ), sprintf( __( 'A copy of this site is about %1$s once zipped, under the %2$s limit.', 'update-rehearsal' ), size_format( $estimate['total_bytes'], 1 ), size_format( $estimate['max_bytes'], 1 ) ), $action );
 	}
 
 	/**

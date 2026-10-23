@@ -119,11 +119,14 @@ class Rehearsals implements Service {
 		$report = json_decode( (string) get_post_meta( $id, self::META, true ), true );
 		$report = is_array( $report ) ? $report : array();
 		$user   = get_userdata( (int) $post->post_author );
+		$time   = (int) strtotime( $post->post_date_gmt . ' UTC' );
 
 		return array(
 			'id'      => (int) $post->ID,
 			'title'   => $post->post_title,
-			'date'    => mysql_to_rfc3339( $post->post_date_gmt ),
+			// ISO 8601 with the zone, so nothing reads the GMT time as local time.
+			'date'    => gmdate( 'c', $time ),
+			'when'    => self::when( $time ),
 			'user'    => $user ? $user->user_login : '',
 			'user_id' => (int) $post->post_author,
 			'verdict' => (string) get_post_meta( $id, self::VERDICT_META, true ),
@@ -181,6 +184,7 @@ class Rehearsals implements Service {
 			'id'       => $item['id'],
 			'title'    => $item['title'],
 			'date'     => $item['date'],
+			'when'     => $item['when'] ?? '',
 			'user'     => $item['user'],
 			'verdict'  => $item['verdict'],
 			'status'   => (string) ( $report['status'] ?? '' ),
@@ -191,6 +195,25 @@ class Rehearsals implements Service {
 			'pages'    => count( (array) ( $report['urls'] ?? array() ) ),
 			'problems' => count( (array) ( $report['errors'] ?? array() ) ),
 		);
+	}
+
+	/**
+	 * A time in the site's own date and time format and time zone.
+	 *
+	 * @param int $time Unix time.
+	 * @return string
+	 */
+	public static function when( int $time ): string {
+		$format = trim( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
+
+		/**
+		 * Filters the date and time format of rehearsal times on the screen.
+		 *
+		 * @param string $format PHP date format. Default the site's date format, a space and its time format.
+		 */
+		$format = (string) apply_filters( 'update_rehearsal_date_format', '' !== $format ? $format : 'Y-m-d H:i' );
+
+		return (string) wp_date( '' !== $format ? $format : 'Y-m-d H:i', $time );
 	}
 
 	/**
