@@ -24,15 +24,28 @@
 
 Errors are matched by level, source and message, without line numbers, so a warning that only moved is not new. Errors inside WordPress go to the first plugin or theme in the stack trace.
 
+A page whose status changed says so in the Changes column, such as "Page broke: 200 to 500", even though its HTML is not compared. Under an amber or red verdict, "Update for real" asks first and names the problems (`updateRehearsal.confirmUpdate`).
+
+## Size of the copy
+
+The limit counts what your browser downloads: the zipped parts, not the files on disk. Code and SQL shrink to about a quarter once zipped, images and fonts hardly at all.
+
+- **The estimate** on the Rehearse tab adds the tables copied in full and the plugin and theme code, each times how much of it is left once zipped (`update_rehearsal_pack_ratios`). It runs a little high on purpose.
+- **The build** adds up the real size of each zipped part and stops as soon as the total passes the limit.
+- **Measuring the code** reads the size of every file, which takes seconds on a site with tens of thousands of them. So it happens once, after the screen loads ("Estimating the size of the copy..."), and the result is kept in the `update_rehearsal_code_size` transient for a day (`update_rehearsal_estimate_lifetime`). Installing, updating, turning on or off or deleting a plugin or theme forgets it, and so does saving the settings. "Measure again" on the screen, or `wp update-rehearsal estimate --fresh`, reads the files again. Site Health only reads the stored size.
+- **What stays out**: inactive plugins (unless "Copy inactive plugins too" is on), and development leftovers (`update_rehearsal_skipped_paths`): `.git`, `.svn`, `.hg`, `.github`, `.wordpress-org`, `node_modules`, `.DS_Store` and `*.zip` wherever they are, and `/tests` and `/test` at the top of a plugin or theme. Composer packages a plugin or theme installed for development only, the `dev-package-names` in its `vendor/composer/installed.json`, stay out too, except the files its autoloader loads at start (`update_rehearsal_skip_dev_packages`).
+
+Over the limit, the message names what makes the copy big: the biggest plugin and theme folders when code is most of it, the biggest tables when the database is.
+
 ## Hooks
 
 | Hook | Type | Use |
 | --- | --- | --- |
 | `update_rehearsal_capability` | filter | `( string $capability )`. Who can run rehearsals and read reports, on the screen, over REST and through abilities. Default `update_plugins` |
-| `update_rehearsal_bundle_max_bytes` | filter | `( int $bytes )`. The size cap of a bundle (database plus code). Default 100 MB, at least 1 MB |
+| `update_rehearsal_bundle_max_bytes` | filter | `( int $bytes )`. The size cap of a bundle (database plus code), once zipped. Default 100 MB, at least 1 MB |
 | `update_rehearsal_excluded_tables` | filter | `( string[] $names, array $tables )`. Tables copied as structure only. `$tables` has every table with `rows`, `bytes` and `core`. Core tables always go in full |
 | `update_rehearsal_table_size_threshold` | filter | `( int $bytes )`. Size above which a table that is not a core table goes in as structure only. Default 10 MB. 0 copies everything in full |
-| `update_rehearsal_include_inactive_plugins` | filter | `( bool $include )`. Copy inactive plugins. Default true, or the setting |
+| `update_rehearsal_include_inactive_plugins` | filter | `( bool $include )`. Copy inactive plugins. Default false, or the setting. Inactive plugins cannot change the pages checked |
 | `update_rehearsal_scrub_users` | filter | `( bool $scrub )`. Replace user emails and password hashes in the copy. Default true, or the setting |
 | `update_rehearsal_test_urls` | filter | `( array $urls )`. The pages requested before and after. Each entry: `path` (relative to the home page), `label`, `admin` (needs a login), `compare` (diff the HTML; off for admin screens). Plain strings work too |
 | `update_rehearsal_normalise_html` | filter | `( string[] $patterns )`. JavaScript regular expression sources removed from each page before the comparison, with the `gi` flags |
@@ -41,14 +54,18 @@ Errors are matched by level, source and message, without line numbers, so a warn
 | `update_rehearsal_playground_remote_url` | filter | `( string $url )`. The `remote.html` to boot, for a self-hosted Playground. Default `https://playground.wordpress.net/remote.html` |
 | `update_rehearsal_php_versions` | filter | `( array $versions )`. PHP versions offered for the copy. Default 7.4 to 8.5 |
 | `update_rehearsal_dropins_to_skip` | filter | `( string[] $files )`. Drop-ins left out. Default `object-cache.php`, `advanced-cache.php`, `db.php`. `db.php` always stays out |
-| `update_rehearsal_skipped_paths` | filter | `( string[] $names )`. File and folder names never copied. Default `.git`, `.svn`, `.hg`, `node_modules`, `.DS_Store` |
+| `update_rehearsal_skipped_paths` | filter | `( string[] $patterns )`. Files and folders never copied from plugins and themes. A name or shell pattern matches anywhere; a leading slash matches from the top of the plugin or theme folder. Default `.git`, `.svn`, `.hg`, `.github`, `.wordpress-org`, `node_modules`, `.DS_Store`, `*.zip`, `/tests`, `/test` |
+| `update_rehearsal_skip_dev_packages` | filter | `( bool $skip )`. Leave out Composer packages installed for development only, keeping their autoloaded files. Default true |
+| `update_rehearsal_pack_ratios` | filter | `( array $ratios )`. How much of each file type the estimate expects to be left once zipped, by lower-case extension, plus `database` (0.25) and `default` (0.5). Clamped to 0.01 to 1 |
+| `update_rehearsal_estimate_lifetime` | filter | `( int $seconds )`. How long the measured code size is kept. Default 1 day, at least 1 minute |
+| `update_rehearsal_date_format` | filter | `( string $format )`. PHP date format of rehearsal times on the screen, in the site's time zone. Default the site's date format and time format |
 | `update_rehearsal_excluded_options` | filter | `( string[] $patterns )`. Option names left out, as SQL LIKE patterns. Default transients and site transients. The plugin's own options always stay out |
 | `update_rehearsal_rows_per_query` | filter | `( int $rows )`. Rows read per query while exporting. Default 500, between 10 and 10000 |
 | `update_rehearsal_step_seconds` | filter | `( int $seconds )`. How long one build request runs. Default 8, between 1 and 60 |
 | `update_rehearsal_bundle_lifetime` | filter | `( int $seconds )`. How long bundle files stay before the clean-up removes them. Default 1 hour |
 | `update_rehearsal_work_dir` | filter | `( string $dir )`. Where bundles are built. Default `update-rehearsal/` in the system temp folder |
 | `update_rehearsal_retention_days` | filter | `( int $days )`. How long reports are kept. Default 90, or the setting |
-| `update_rehearsal_over_limit_message` | filter | `( string $message, array $estimate )`. What people read when the site is over the cap |
+| `update_rehearsal_over_limit_message` | filter | `( string $message, array $estimate )`. What people read when the site is over the cap. `$estimate` has the sizes on disk and zipped, the biggest tables (`biggest`) and folders (`folders`) |
 | `update_rehearsal_rehearsal_started` | action | `( array $job )`. Someone pressed Start and the bundle started building. `$job`: `id`, `user`, `items`, `php` |
 | `update_rehearsal_bundle_built` | action | `( string $dir, array $manifest )`. A bundle is ready, in the browser flow and for WP-CLI |
 | `update_rehearsal_rehearsal_finished` | action | `( array $report, int $post_id )`. A rehearsal finished and its report was stored |
@@ -97,6 +114,8 @@ The rehearsal screen runs `wp.hooks`, read when used, so scripts that load later
 | `updateRehearsal.blueprintSteps` | filter | `( steps, context )`. [Blueprint steps](https://wordpress.github.io/wordpress-playground/blueprints/steps) run in the copy after it loads and before the first request. Default: `defineWpConfigConsts` with `WP_DEBUG_LOG` on and cron off. `context`: `phase`, `items`, `php`, `manifest` |
 | `updateRehearsal.stepFinished` | action | `( step, context )`. A step finished: `bundle`, `download`, `boot`, `load`, `before`, `apply`, `after`, `compare` |
 | `updateRehearsal.finished` | action | `( report, context )`. The run ended, finished or failed. `report.verdict` is the stored verdict |
+| `updateRehearsal.confirmUpdate` | filter | `( ask, context )`. Whether "Update for real" asks first. `ask`: `required` (true under amber and red), `level`, `reasons` (up to five, in words), `more`. `context`: `item`, `stored`. Return `required: false` to skip the question |
+| `updateRehearsal.estimated` | action | `( estimate )`. The size of the copy arrived on the Rehearse tab, after loading or "Measure again" |
 
 ```js
 // Logged-in widgets show a random greeting: leave it out of the comparison.
@@ -110,7 +129,7 @@ wp.hooks.addFilter( 'updateRehearsal.blueprintSteps', 'my-plugin', ( steps ) =>
 );
 ```
 
-`window.updateRehearsal` exposes `testUrls( context )`, `run( { items, php } )`, `renderReport( element, rehearsal, options )` and `selection()`.
+`window.updateRehearsal` exposes `testUrls( context )`, `run( { items, php } )`, `renderReport( element, rehearsal, options )`, `selection()` and `loadEstimate( fresh )`.
 
 ## Abilities
 
@@ -120,14 +139,14 @@ On WordPress 6.9 and later, Update Rehearsal registers [abilities](https://devel
 | --- | --- |
 | `update-rehearsal/list-rehearsals` | Past rehearsals, newest first, with the verdict and reasons. Input: `verdict`, `limit`, `page` |
 | `update-rehearsal/get-rehearsal` | One rehearsal with its full report: pages, new errors by source, failed tables. Input: `id` |
-| `update-rehearsal/get-bundle-estimate` | How big a copy would be, the limit, the biggest tables and the tables copied as structure only |
+| `update-rehearsal/get-bundle-estimate` | How big a copy would be on disk and once zipped, the limit, the biggest tables and plugin or theme folders, and the tables copied as structure only |
 
 Running a rehearsal needs a browser, because the copy runs in WordPress Playground there, so no ability starts one. For a rehearsal without a browser, see CI below.
 
 ## WP-CLI
 
 ```sh
-wp update-rehearsal estimate [--format=table|csv|json|yaml]
+wp update-rehearsal estimate [--fresh] [--format=table|csv|json|yaml]
 wp update-rehearsal updates [--format=table|csv|json|yaml|count]
 wp update-rehearsal bundle [--output=<file>] [--updates=all|none|<keys>] [--php=<version>]
 wp update-rehearsal list [--verdict=<verdict>] [--per-page=<n>] [--page=<n>] [--fields=<fields>] [--format=table|csv|json|yaml|ids|count]

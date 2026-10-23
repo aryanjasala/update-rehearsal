@@ -37,8 +37,8 @@ Updating a plugin, a theme, WordPress or the PHP version on a live site is a gam
 - **New PHP errors by plugin or theme**, read from the copy's debug.log; an error inside WordPress goes to the plugin that called it
 - **Each page before and after**: status, response time, new errors, a diff of the visible text and elements, and a side by side visual compare
 - **A safe copy**: no transients or sessions, emails and password hashes replaced, no uploads, and the copy sends no email, runs no cron and makes no outgoing requests
-- **Size first**: the screen shows how big the copy is, and refuses a site over the 100 MB limit with the tables that make it big
-- **Update for real** links, JSON and HTML report downloads, "Rehearsed 2 hours ago: green" on the Plugins screen, and a history
+- **Size first**: the screen shows how big the copy is once zipped, and refuses a site over the 100 MB limit, naming the plugin folders or tables that make it big
+- **Update for real** links that ask first under amber or red and name the problems, JSON and HTML report downloads, "Rehearsed 2 hours ago: green" on the Plugins screen, and a history
 - WP-CLI, a bundle for @wp-playground/cli in CI, abilities for AI agents, and a hook for every default
 
 ## Install
@@ -141,6 +141,12 @@ Small plugins that each fill one gap in WordPress, all free with no pro version:
 | <img src="https://raw.githubusercontent.com/aryanjasala/category-tag-trash/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Category & Tag Trash](https://github.com/aryanjasala/category-tag-trash) | A trash for categories, tags and custom terms, with undo and full restore |
 | <img src="https://raw.githubusercontent.com/aryanjasala/site-read-only-mode/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Site Read-Only Mode](https://github.com/aryanjasala/site-read-only-mode) | Read-only mode for WordPress during migrations and deploys |
 | <img src="https://raw.githubusercontent.com/aryanjasala/restore-blocks-from-revisions/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Restore Blocks from Revisions](https://github.com/aryanjasala/restore-blocks-from-revisions) | Restore a single block from an old revision, not the whole post |
+| <img src="https://raw.githubusercontent.com/aryanjasala/activity-log-with-undo/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Activity Log with Undo](https://github.com/aryanjasala/activity-log-with-undo) | An activity log where every change you can reverse has an Undo button |
+| <img src="https://raw.githubusercontent.com/aryanjasala/agent-governance/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Agent Governance](https://github.com/aryanjasala/agent-governance) | Hold risky AI agent calls for approval, preview what they change, and roll back a session |
+| <img src="https://raw.githubusercontent.com/aryanjasala/block-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Doctor](https://github.com/aryanjasala/block-doctor) | Scan the whole site for invalid and broken blocks and fix them in bulk, with undo |
+| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, see the diff, reset them or send them to Git |
+| <img src="https://raw.githubusercontent.com/aryanjasala/role-right-sizer/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Role Right-Sizer](https://github.com/aryanjasala/role-right-sizer) | Recommends the smallest role each user needs, from what they actually do |
+| <img src="https://raw.githubusercontent.com/aryanjasala/user-session-manager/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [User Session Manager](https://github.com/aryanjasala/user-session-manager) | See every device signed in, sign out one, and limit sessions per role |
 
 ## License
 
