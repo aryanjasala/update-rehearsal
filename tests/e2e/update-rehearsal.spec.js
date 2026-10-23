@@ -1,6 +1,6 @@
 const https = require( 'https' );
 const { test, expect, wp, wpEval } = require( './utils' );
-const { SLUG, FIXTURE, installFixture, removeFixture, offer, liveVersion } = require( './fixtures' );
+const { SLUG, FIXTURE, installFixture, removeFixture, offer, liveVersion, report } = require( './fixtures' );
 
 const PAGE = '/wp-admin/tools.php?page=update-rehearsal';
 const KEY = 'plugin:' + FIXTURE;
@@ -30,20 +30,6 @@ const readZip = ( path, files ) =>
 			echo wp_json_encode( $out );
 		` )
 	);
-
-// A report as the browser stores it.
-const report = ( verdict ) => ( {
-	status: 'finished',
-	verdict,
-	reasons: verdict === 'green' ? [] : [ 'Fatal error from Recipe Cards on /: Uncaught Error' ],
-	items: [ { key: KEY, type: 'plugin', name: 'Recipe Cards', from: '1.0', to: '1.1' } ],
-	php: { from: '8.3', to: '8.3' },
-	urls: [
-		{ path: '/', label: 'Home page', admin: false, compare: true, verdict, errors: verdict === 'green' ? 0 : 1, before: { status: 200, ms: 120 }, after: { status: verdict === 'green' ? 200 : 500, ms: 90 }, diff: { changed: false } },
-	],
-	errors: [],
-	sources: [],
-} );
 
 /**
  * Whether this machine can reach WordPress Playground.
