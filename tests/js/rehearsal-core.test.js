@@ -277,3 +277,37 @@ test( 'formatBytes', () => {
 	assert.equal( core.formatBytes( 1536 ), '1.5 KB' );
 	assert.equal( core.formatBytes( 104857600 ), '100.0 MB' );
 } );
+
+// ---------------------------------------------------------------------------
+// The Changes column and the question before a real update.
+// ---------------------------------------------------------------------------
+
+test( 'changeSummary never calls a page that went from 200 to 500 unchanged', () => {
+	const page = ( before, after, extra ) => Object.assign( { compare: true, before: { status: before }, after: { status: after }, diff: { changed: false } }, extra || {} );
+
+	assert.deepEqual( core.changeSummary( page( 200, 500 ) ), { kind: 'broke', before: 200, after: 500 } );
+	assert.equal( core.changeSummary( page( 200, 0 ) ).kind, 'broke', 'no answer at all is broken too' );
+	assert.deepEqual( core.changeSummary( page( 200, 404 ) ), { kind: 'status', before: 200, after: 404 } );
+	assert.equal( core.changeSummary( page( 500, 500 ) ).kind, 'error' );
+	// A status change shows on admin screens too, whose HTML is never compared.
+	assert.equal( core.changeSummary( page( 200, 500, { compare: false } ) ).kind, 'broke' );
+	assert.equal( core.changeSummary( page( 200, 200, { compare: false } ) ).kind, 'not_compared' );
+	assert.equal( core.changeSummary( page( 200, 200, { diff: { changed: true } } ) ).kind, 'changed' );
+	assert.equal( core.changeSummary( page( 200, 200 ) ).kind, 'none' );
+	assert.equal( core.changeSummary( null ).kind, 'none' );
+} );
+
+test( 'compareUrl results feed changeSummary: the stored 200 to 500 page says it broke', () => {
+	const result = core.compareUrl( { path: '/', label: 'Home', compare: true }, { status: 200, ms: 10, html: '<p>Hi</p>', errors: [] }, { status: 500, ms: 10, html: 'Fatal', errors: [] } );
+	assert.equal( result.verdict, 'red' );
+	assert.equal( result.diff.changed, false );
+	assert.equal( core.changeSummary( result ).kind, 'broke' );
+} );
+
+test( 'updateConfirm asks on red and amber, names up to five problems, and not on green', () => {
+	const reasons = [ 'one', 'two', 'three', 'four', 'five', 'six', 'seven', '' ];
+	assert.deepEqual( core.updateConfirm( 'red', reasons ), { required: true, level: 'red', reasons: [ 'one', 'two', 'three', 'four', 'five' ], more: 2 } );
+	assert.deepEqual( core.updateConfirm( 'amber', [ 'Looks different after the update: /' ] ), { required: true, level: 'amber', reasons: [ 'Looks different after the update: /' ], more: 0 } );
+	assert.equal( core.updateConfirm( 'green', [] ).required, false );
+	assert.equal( core.updateConfirm( 'failed', [ 'x' ] ).required, false );
+} );

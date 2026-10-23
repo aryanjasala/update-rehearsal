@@ -11,6 +11,7 @@ use AryanX\UpdateRehearsal\Rehearsals;
 use AryanX\UpdateRehearsal\Tests\Doubles\Post;
 use AryanX\UpdateRehearsal\Tests\Doubles\User;
 use Brain\Monkey\Actions;
+use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 
 /**
@@ -124,6 +125,20 @@ final class RehearsalsTest extends PluginTestCase {
 		$latest = $this->options[ Rehearsals::LATEST_OPTION ];
 		$this->assertSame( array( 'plugin:shop-kit/shop-kit.php', 'php:8.4' ), array_keys( $latest ) );
 		$this->assertSame( '2.1', $latest['plugin:shop-kit/shop-kit.php']['to'] );
+	}
+
+	public function test_dates_carry_their_zone_and_show_in_the_site_format(): void {
+		$this->options['date_format'] = 'j F Y';
+		$this->options['time_format'] = 'g:i a';
+		$saved = ( new Rehearsals() )->save( $this->report(), 1 );
+
+		// Stored as GMT; the zone is spelled out, so a browser never reads it as local time.
+		$this->assertSame( '2026-10-23T08:00:00+00:00', $saved['date'] );
+		$this->assertSame( '23 October 2026 8:00 am', $saved['when'] );
+		$this->assertSame( $saved['when'], Rehearsals::summary( $saved )['when'] );
+
+		Filters\expectApplied( 'update_rehearsal_date_format' )->once()->with( 'j F Y g:i a' )->andReturn( 'Y-m-d' );
+		$this->assertSame( '2026-10-23', Rehearsals::when( (int) strtotime( '2026-10-23 08:00:00 UTC' ) ) );
 	}
 
 	public function test_a_failed_run_fires_failed_and_is_not_remembered(): void {

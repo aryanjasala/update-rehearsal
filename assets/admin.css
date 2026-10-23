@@ -25,9 +25,7 @@
 	border-radius: 3px;
 	background: #f0f0f1;
 	color: #50575e;
-	font-size: 11px;
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
+	font-size: 12px;
 }
 
 .urh-muted {
@@ -66,6 +64,16 @@
 	border-left-color: #d63638;
 }
 
+.urh-estimate .spinner {
+	float: none;
+	margin: 0 6px 0 0;
+	vertical-align: middle;
+}
+
+.urh-measured .button-link {
+	vertical-align: baseline;
+}
+
 .urh-start {
 	margin-top: 1.5em;
 }
@@ -78,9 +86,7 @@
 	color: #fff;
 	font-weight: 600;
 	text-decoration: none;
-	text-transform: uppercase;
-	font-size: 11px;
-	letter-spacing: 0.04em;
+	font-size: 12px;
 }
 
 a.urh-badge:hover,
@@ -194,6 +200,32 @@ a.urh-badge:focus {
 }
 
 /* The report. */
+
+.urh-table-scroll {
+	max-width: 1100px;
+	overflow-x: auto;
+}
+
+.urh-broke {
+	color: #b32d2e;
+}
+
+.urh-confirm {
+	max-width: 760px;
+	margin: 8px 0 16px;
+	padding: 4px 14px;
+	border-left-color: #dba617;
+}
+
+.urh-confirm-red {
+	border-left-color: #d63638;
+}
+
+.urh-confirm-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
 
 .urh-verdict {
 	display: flex;
@@ -327,9 +359,15 @@ a.urh-badge:focus {
 
 .urh-compare-head {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 10px;
 	margin-bottom: 8px;
+}
+
+.urh-compare-title {
+	margin: 0;
+	font-size: 14px;
 }
 
 .urh-compare-close {

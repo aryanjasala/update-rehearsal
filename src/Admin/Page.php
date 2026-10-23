@@ -195,9 +195,14 @@ final class Page implements Service {
 	 * @return array[]
 	 */
 	private function updates_for_screen(): array {
-		$items = array();
+		$items  = array();
+		$active = (array) get_option( 'active_plugins', array() );
+		if ( is_multisite() ) {
+			$active = array_merge( $active, array_keys( (array) get_site_option( 'active_sitewide_plugins', array() ) ) );
+		}
 		foreach ( $this->updates->pending() as $item ) {
-			$latest = $this->rehearsals->latest( $item['key'], $item['to'] );
+			$item['active'] = 'plugin' !== $item['type'] || in_array( $item['id'], $active, true );
+			$latest         = $this->rehearsals->latest( $item['key'], $item['to'] );
 			unset( $item['package'] );
 			$item['updateUrl'] = Updates::update_url( $item );
 			$item['latest']    = $latest ? $latest + array(
@@ -263,7 +268,8 @@ final class Page implements Service {
 	 * The Rehearse tab.
 	 */
 	private function render_rehearse(): void {
-		$estimate = $this->estimate->get();
+		// Never walks the plugin and theme files here: a stored measurement or "estimating", then the script asks.
+		$estimate = $this->estimate->get( false );
 		$updates  = $this->updates_for_screen();
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Preselects an update from a link on the Plugins screen.
 		$preselect = isset( $_GET['rehearse'] ) ? sanitize_text_field( wp_unslash( $_GET['rehearse'] ) ) : '';
@@ -297,6 +303,9 @@ final class Page implements Service {
 								<td>
 									<label for="urh-item-<?php echo esc_attr( md5( $item['key'] ) ); ?>"><strong><?php echo esc_html( $item['name'] ); ?></strong></label>
 									<span class="urh-type"><?php echo esc_html( self::type_label( $item['type'] ) ); ?></span>
+									<?php if ( ! $item['active'] ) : ?>
+										<br><span class="urh-muted urh-inactive"><?php esc_html_e( 'Inactive: it cannot change the pages a rehearsal checks.', 'update-rehearsal' ); ?></span>
+									<?php endif; ?>
 								</td>
 								<td><?php echo esc_html( $item['from'] . ' → ' . $item['to'] ); ?></td>
 								<td>
@@ -352,10 +361,12 @@ final class Page implements Service {
 			</ul>
 
 			<h2><?php esc_html_e( '3. Size of the copy', 'update-rehearsal' ); ?></h2>
-			<?php $this->render_estimate( $estimate ); ?>
+			<div class="urh-estimate-region" aria-live="polite">
+				<?php echo self::estimate_html( $estimate ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in estimate_html(). ?>
+			</div>
 
 			<p class="urh-start">
-				<button type="button" class="button button-primary button-hero" id="urh-start" <?php disabled( $estimate['over_limit'] ); ?>><?php esc_html_e( 'Start rehearsal', 'update-rehearsal' ); ?></button>
+				<button type="button" class="button button-primary button-hero" id="urh-start" <?php disabled( $estimate['over_limit'] || $estimate['pending'] ); ?>><?php esc_html_e( 'Start rehearsal', 'update-rehearsal' ); ?></button>
 			</p>
 			<p class="description urh-external">
 				<?php
@@ -370,45 +381,52 @@ final class Page implements Service {
 	}
 
 	/**
-	 * The size box.
+	 * The size box, for the screen and for the REST estimate the script asks for.
 	 *
 	 * @param array $estimate Estimate.
+	 * @return string HTML.
 	 */
-	private function render_estimate( array $estimate ): void {
-		?>
-		<div class="urh-estimate<?php echo $estimate['over_limit'] ? ' urh-estimate-over' : ''; ?>">
-			<p>
-				<?php
-				echo esc_html(
-					sprintf(
-						/* translators: 1: database size, 2: code size, 3: total, 4: limit. */
-						__( 'Database %1$s, code %2$s: about %3$s in total. The limit is %4$s.', 'update-rehearsal' ),
-						size_format( $estimate['database_bytes'], 1 ),
-						size_format( $estimate['code_bytes'], 1 ),
-						size_format( $estimate['total_bytes'], 1 ),
-						size_format( $estimate['max_bytes'], 1 )
-					)
-				);
-				?>
-			</p>
-			<?php if ( $estimate['over_limit'] ) : ?>
-				<div class="notice notice-error inline urh-too-big"><p><?php echo esc_html( $estimate['message'] ); ?></p></div>
-			<?php endif; ?>
-			<?php if ( $estimate['excluded'] ) : ?>
-				<p class="urh-muted">
-					<?php esc_html_e( 'Copied without their rows:', 'update-rehearsal' ); ?>
-					<?php
-					$names = array();
-					foreach ( $estimate['excluded'] as $table ) {
-						$names[] = $table['name'] . ' (' . size_format( $table['bytes'], 1 ) . ')';
-					}
-					echo esc_html( implode( ', ', $names ) );
-					?>
-					<a href="<?php echo esc_url( self::url( array( 'tab' => 'settings' ) ) ); ?>"><?php esc_html_e( 'Change', 'update-rehearsal' ); ?></a>
-				</p>
-			<?php endif; ?>
-		</div>
-		<?php
+	public static function estimate_html( array $estimate ): string {
+		if ( ! empty( $estimate['pending'] ) ) {
+			return '<div class="urh-estimate urh-estimate-pending" data-state="pending" aria-busy="true"><p><span class="spinner is-active"></span> '
+				. esc_html__( 'Estimating the size of the copy...', 'update-rehearsal' )
+				. '</p><p class="urh-muted">' . esc_html__( 'This reads the size of every plugin and theme file once, then remembers it until plugins or themes change.', 'update-rehearsal' ) . '</p></div>';
+		}
+
+		$html = sprintf(
+			'<div class="urh-estimate%1$s" data-state="%2$s"><p>%3$s</p>',
+			$estimate['over_limit'] ? ' urh-estimate-over' : '',
+			$estimate['over_limit'] ? 'over' : 'ok',
+			esc_html(
+				sprintf(
+					/* translators: 1: size once zipped, 2: database size, 3: code size, 4: limit. */
+					__( 'About %1$s to send once zipped: the database is %2$s and the code %3$s on disk. The limit is %4$s.', 'update-rehearsal' ),
+					size_format( $estimate['total_bytes'], 1 ),
+					size_format( $estimate['database_bytes'], 1 ),
+					size_format( $estimate['code_bytes'], 1 ),
+					size_format( $estimate['max_bytes'], 1 )
+				)
+			)
+		);
+		if ( $estimate['over_limit'] ) {
+			$html .= '<div class="notice notice-error inline urh-too-big"><p>' . esc_html( $estimate['message'] ) . '</p></div>';
+		}
+		if ( $estimate['excluded'] ) {
+			$names = array();
+			foreach ( $estimate['excluded'] as $table ) {
+				$names[] = $table['name'] . ' (' . size_format( $table['bytes'], 1 ) . ')';
+			}
+			$html .= '<p class="urh-muted">' . esc_html__( 'Copied without their rows:', 'update-rehearsal' ) . ' ' . esc_html( implode( ', ', $names ) )
+				. ' <a href="' . esc_url( self::url( array( 'tab' => 'settings' ) ) ) . '">' . esc_html__( 'Change', 'update-rehearsal' ) . '</a></p>';
+		}
+		if ( ! empty( $estimate['measured'] ) ) {
+			$html .= '<p class="urh-muted urh-measured">'
+				/* translators: %s: time ago, such as "2 hours". */
+				. esc_html( sprintf( __( 'Code measured %s ago.', 'update-rehearsal' ), human_time_diff( (int) $estimate['measured'] ) ) )
+				. ' <button type="button" class="button-link urh-remeasure">' . esc_html__( 'Measure again', 'update-rehearsal' ) . '</button></p>';
+		}
+
+		return $html . '</div>';
 	}
 
 	/**
@@ -442,13 +460,18 @@ final class Page implements Service {
 				<?php foreach ( $found['items'] as $item ) : ?>
 					<tr>
 						<td><a class="row-title" href="<?php echo esc_url( self::url( array( 'rehearsal' => $item['id'] ) ) ); ?>"><?php echo esc_html( $item['title'] ); ?></a></td>
-						<td><span class="urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_label( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></td>
+						<td><span class="urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></td>
 						<td><?php echo esc_html( (string) $item['pages'] ); ?></td>
 						<td><?php echo esc_html( $item['user'] ); ?></td>
 						<td>
 							<?php
-							/* translators: %s: time ago, such as "2 hours". */
-							echo esc_html( sprintf( __( '%s ago', 'update-rehearsal' ), human_time_diff( (int) strtotime( $item['date'] ) ) ) );
+							printf(
+								'<time datetime="%1$s" title="%2$s">%3$s</time>',
+								esc_attr( $item['date'] ),
+								esc_attr( $item['when'] ),
+								/* translators: %s: time ago, such as "2 hours". */
+								esc_html( sprintf( __( '%s ago', 'update-rehearsal' ), human_time_diff( (int) strtotime( $item['date'] ) ) ) )
+							);
 							?>
 						</td>
 					</tr>
@@ -479,15 +502,16 @@ final class Page implements Service {
 	 */
 	private function render_report( int $id ): void {
 		$item = $this->rehearsals->get( $id );
-		echo '<p><a href="' . esc_url( self::url( array( 'tab' => 'history' ) ) ) . '">' . esc_html__( '← All rehearsals', 'update-rehearsal' ) . '</a></p>';
+		// The arrow points back the way the page reads.
+		echo '<p><a href="' . esc_url( self::url( array( 'tab' => 'history' ) ) ) . '" class="urh-back"><span aria-hidden="true">' . ( is_rtl() ? '&rarr;' : '&larr;' ) . '</span> ' . esc_html__( 'All rehearsals', 'update-rehearsal' ) . '</a></p>';
 		if ( ! $item ) {
 			echo '<div class="notice notice-error inline"><p>' . esc_html__( 'That rehearsal does not exist.', 'update-rehearsal' ) . '</p></div>';
 			return;
 		}
 		?>
+		<h2 class="urh-report-title"><?php echo esc_html( $item['title'] ); ?></h2>
 		<div id="urh-report" class="urh-report" data-rehearsal="<?php echo esc_attr( (string) $item['id'] ); ?>">
-			<h2><?php echo esc_html( $item['title'] ); ?></h2>
-			<p class="urh-verdict-line"><span class="urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_label( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></p>
+			<p class="urh-verdict-line"><span class="urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></p>
 		</div>
 		<?php
 	}
@@ -497,7 +521,8 @@ final class Page implements Service {
 	 */
 	private function render_settings(): void {
 		$settings = $this->settings->all();
-		$estimate = $this->estimate->get();
+		// Only the tables are needed here, so the code is not measured.
+		$estimate = $this->estimate->get( false );
 		?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="urh-settings">
 			<input type="hidden" name="action" value="update_rehearsal_settings">
@@ -514,7 +539,7 @@ final class Page implements Service {
 					<th scope="row"><?php esc_html_e( 'Plugins in the copy', 'update-rehearsal' ); ?></th>
 					<td>
 						<label><input type="checkbox" name="include_inactive" value="1" <?php checked( $settings['include_inactive'] ); ?>> <?php esc_html_e( 'Copy inactive plugins too', 'update-rehearsal' ); ?></label>
-						<p class="description"><?php esc_html_e( 'Turn this off to make the copy smaller. Updates to inactive plugins then cannot be rehearsed.', 'update-rehearsal' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Off by default. Inactive plugins cannot change the pages a rehearsal checks, and they often make up most of the code. Turn this on only to unpack an update of an inactive plugin in the copy.', 'update-rehearsal' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -608,7 +633,7 @@ final class Page implements Service {
 			case 'theme':
 				return __( 'Theme', 'update-rehearsal' );
 			default:
-				return __( 'WordPress', 'update-rehearsal' );
+				return __( 'WordPress core', 'update-rehearsal' );
 		}
 	}
 }
