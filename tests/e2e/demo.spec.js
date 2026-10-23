@@ -2,14 +2,14 @@
 // Needs WordPress Playground (network).
 const { test, expect, wp, wpEval } = require( './utils' );
 const { prepareSite, recordDemo } = require( './utils/media' );
-const { FIXTURE, installFixture, removeFixture, offer, liveVersion } = require( './fixtures' );
+const { FIXTURE, NAME, installFixture, removeFixture, offer, liveVersion } = require( './fixtures' );
 
 const PAGE = '/wp-admin/tools.php?page=update-rehearsal';
 
 test( 'demo: rehearse a plugin update that breaks the front end', async ( { browser } ) => {
 	test.setTimeout( 300_000 );
 	prepareSite( 'Kitchen Notes' );
-	installFixture( 'Recipe Cards' );
+	installFixture( NAME );
 	offer( '1.2' );
 	const post = wp( 'post', 'create', '--post_title=Lemon tart', '--post_status=publish', '--post_content=<!-- wp:paragraph --><p>A short pastry case and a sharp lemon curd.</p><!-- /wp:paragraph -->', '--porcelain' );
 
@@ -23,6 +23,7 @@ test( 'demo: rehearse a plugin update that breaks the front end', async ( { brow
 				await demo.click( page.locator( `input[value="plugin:${ FIXTURE }"]` ), 500 );
 				await demo.moveTo( page.locator( '#urh-pages' ) );
 				await demo.pause( 900 );
+				await expect( page.locator( '.urh-estimate' ) ).toHaveAttribute( 'data-state', 'ok' );
 				await demo.moveTo( page.locator( '.urh-estimate' ) );
 				await demo.pause( 900 );
 				await demo.click( page.locator( '#urh-start' ), 300 );

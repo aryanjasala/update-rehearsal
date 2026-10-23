@@ -2,7 +2,7 @@
 // Run on demand: npm run screenshots. Needs WordPress Playground (network).
 const { test, expect, wp, wpEval } = require( './utils' );
 const { prepareSite, shot } = require( './utils/media' );
-const { FIXTURE, installFixture, removeFixture, offer } = require( './fixtures' );
+const { FIXTURE, NAME, installFixture, removeFixture, offer } = require( './fixtures' );
 
 const PAGE = '/wp-admin/tools.php?page=update-rehearsal';
 const KEY = 'plugin:' + FIXTURE;
@@ -14,7 +14,7 @@ test.describe.serial( 'Screenshots', () => {
 
 	test.beforeAll( () => {
 		prepareSite( 'Kitchen Notes' );
-		installFixture( 'Recipe Cards' );
+		installFixture( NAME );
 		wpEval( "foreach ( get_posts( array( 'post_type' => 'upd_rehearsal', 'post_status' => 'any', 'fields' => 'ids', 'numberposts' => -1 ) ) as $id ) { wp_delete_post( $id, true ); } delete_option( 'update_rehearsal_latest' );" );
 		const term = wp( 'term', 'create', 'category', 'Desserts', '--porcelain' );
 		for ( const [ title, text ] of [
@@ -47,6 +47,7 @@ test.describe.serial( 'Screenshots', () => {
 		offer( '1.2' );
 		await page.goto( PAGE );
 		await page.locator( `input[value="${ KEY }"]` ).check();
+		await expect( page.locator( '#urh-start' ) ).toBeEnabled();
 
 		// Hold the report back for a moment, so the picture shows the copy with every other step done.
 		let release;
@@ -66,6 +67,9 @@ test.describe.serial( 'Screenshots', () => {
 		release();
 
 		await expect( page.locator( '.urh-verdict' ) ).toBeVisible( { timeout: 60_000 } );
+		// The error names a real-looking plugin file, never a test fixture, and the broken page says so.
+		await expect( page.locator( '.urh-errors' ) ).toContainText( 'wp-content/plugins/recipe-cards/recipe-cards.php' );
+		await expect( page.locator( '.urh-pages-table tr[data-path="/"]' ) ).toContainText( 'Page broke: 200 to 500' );
 		await page.evaluate( () => document.querySelector( '.urh-verdict' ).scrollIntoView( { block: 'start' } ) );
 		await page.evaluate( () => window.scrollBy( 0, -60 ) );
 		await shot( page, 3 );
@@ -75,9 +79,10 @@ test.describe.serial( 'Screenshots', () => {
 		offer( '1.1' );
 		await page.goto( PAGE );
 		await page.locator( `input[value="${ KEY }"]` ).check();
+		await expect( page.locator( '#urh-start' ) ).toBeEnabled();
 		await page.locator( '#urh-start' ).click();
 		await expect( page.locator( '.urh-verdict' ) ).toBeVisible( { timeout: 200_000 } );
-		await expect( page.locator( '.urh-verdict .urh-badge' ) ).toHaveText( 'green' );
+		await expect( page.locator( '.urh-verdict .urh-badge' ) ).toHaveText( 'Green' );
 		await page.evaluate( () => document.querySelector( '.urh-verdict' ).scrollIntoView( { block: 'start' } ) );
 		await page.evaluate( () => window.scrollBy( 0, -60 ) );
 		await shot( page, 4 );
