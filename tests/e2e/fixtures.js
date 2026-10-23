@@ -138,4 +138,29 @@ function liveVersion() {
 	return wp( 'plugin', 'get', SLUG, '--field=version' );
 }
 
-module.exports = { SLUG, FIXTURE, NAME, installFixture, removeFixture, offer, liveVersion };
+// A report as the browser stores it.
+const report = ( verdict ) => ( {
+	status: 'finished',
+	verdict,
+	reasons: verdict === 'green' ? [] : [ 'Fatal error from Recipe Cards on /: Uncaught Error' ],
+	items: [ { key: `plugin:${ FIXTURE }`, type: 'plugin', name: 'Recipe Cards', from: '1.0', to: '1.1' } ],
+	php: { from: '8.3', to: '8.3' },
+	urls: [
+		{ path: '/', label: 'Home page', admin: false, compare: true, verdict, errors: verdict === 'green' ? 0 : 1, before: { status: 200, ms: 120 }, after: { status: verdict === 'green' ? 200 : 500, ms: 90 }, diff: { changed: false } },
+	],
+	errors: [],
+	sources: [],
+} );
+
+/**
+ * Stores a report the way a finished rehearsal does, for screens that show one.
+ *
+ * @param {Function} rest    The rest() fixture.
+ * @param {string}   verdict green, amber or red.
+ * @return {Promise<Object>} The stored rehearsal: { id, verdict, title, ... }.
+ */
+async function storeReport( rest, verdict ) {
+	return ( await rest( 'POST', '/update-rehearsal/v1/rehearsals', { report: report( verdict ) } ) ).body;
+}
+
+module.exports = { SLUG, FIXTURE, NAME, installFixture, removeFixture, offer, liveVersion, report, storeReport };

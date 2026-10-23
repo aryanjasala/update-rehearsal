@@ -1,0 +1,75 @@
+{
+  "$comment": "Screens tests/e2e/a11y.spec.js checks with axe-core. This file belongs to the plugin: apply-template.py only writes it when it is missing. The fields are described in docs/DEVELOPMENT.md.",
+  "include": ["#wpbody-content"],
+  "exclude": [],
+  "screens": [
+    {
+      "name": "Tools > Update Rehearsal with nothing to update",
+      "url": "/wp-admin/tools.php?page=update-rehearsal"
+    },
+    {
+      "name": "Tools > Update Rehearsal with an update chosen",
+      "setup": [{ "js": "fixtures.js", "call": "installFixture" }, { "js": "fixtures.js", "call": "offer", "args": ["1.2"] }],
+      "url": "/wp-admin/tools.php?page=update-rehearsal",
+      "steps": [{ "click": "input[value=\"plugin:recipe-cards/recipe-cards.php\"]" }, { "waitFor": "#urh-start:enabled" }],
+      "cleanup": [{ "js": "fixtures.js", "call": "removeFixture" }]
+    },
+    {
+      "name": "History with a stored rehearsal",
+      "setup": [
+        { "js": "fixtures.js", "call": "installFixture" },
+        { "js": "fixtures.js", "call": "offer", "args": ["1.1"] },
+        { "js": "fixtures.js", "call": "storeReport", "args": ["@rest", "green"], "save": "report" }
+      ],
+      "url": "/wp-admin/tools.php?page=update-rehearsal&tab=history",
+      "steps": [{ "waitFor": ".urh-history" }],
+      "cleanup": [["post", "delete", "{report.id}", "--force"], ["option", "delete", "update_rehearsal_latest"], { "js": "fixtures.js", "call": "removeFixture" }]
+    },
+    {
+      "name": "A red report",
+      "setup": [
+        { "js": "fixtures.js", "call": "installFixture" },
+        { "js": "fixtures.js", "call": "offer", "args": ["1.1"] },
+        { "js": "fixtures.js", "call": "storeReport", "args": ["@rest", "red"], "save": "report" }
+      ],
+      "url": "/wp-admin/tools.php?page=update-rehearsal&rehearsal={report.id}",
+      "steps": [{ "waitFor": ".urh-verdict" }],
+      "cleanup": [["post", "delete", "{report.id}", "--force"], ["option", "delete", "update_rehearsal_latest"], { "js": "fixtures.js", "call": "removeFixture" }]
+    },
+    {
+      "name": "The visual compare dialog",
+      "setup": [
+        { "js": "fixtures.js", "call": "installFixture" },
+        { "js": "fixtures.js", "call": "offer", "args": ["1.1"] },
+        { "js": "fixtures.js", "call": "storeReport", "args": ["@rest", "green"], "save": "report" },
+        { "wp": ["update-rehearsal", "show", "{report.id}", "--format=json"], "save": "stored" }
+      ],
+      "url": "/wp-admin/tools.php?page=update-rehearsal&rehearsal={report.id}",
+      "steps": [
+        { "waitFor": ".urh-verdict" },
+        { "evaluate": "window.updateRehearsal.renderReport( document.getElementById( 'urh-report' ), {stored}, { previews: { '/': { before: '<p>Before</p>', after: '<p>After</p>' } } } )" },
+        { "click": ".urh-compare-open" },
+        { "waitFor": "role=dialog[name=/Visual compare: \\//i]" }
+      ],
+      "include": [".urh-compare"],
+      "exclude": [".urh-compare iframe"],
+      "cleanup": [["post", "delete", "{report.id}", "--force"], ["option", "delete", "update_rehearsal_latest"], { "js": "fixtures.js", "call": "removeFixture" }]
+    },
+    {
+      "name": "Tools > Update Rehearsal settings",
+      "url": "/wp-admin/tools.php?page=update-rehearsal&tab=settings"
+    },
+    {
+      "name": "Plugins screen with the rehearsal note",
+      "setup": [
+        { "js": "fixtures.js", "call": "installFixture" },
+        { "js": "fixtures.js", "call": "offer", "args": ["1.1"] },
+        { "js": "fixtures.js", "call": "storeReport", "args": ["@rest", "green"], "save": "report" }
+      ],
+      "url": "/wp-admin/plugins.php",
+      "include": ["tr.plugin-update-tr[data-plugin=\"recipe-cards/recipe-cards.php\"] .urh-note"],
+      "cleanup": [["post", "delete", "{report.id}", "--force"], ["option", "delete", "update_rehearsal_latest"], { "js": "fixtures.js", "call": "removeFixture" }]
+    }
+  ],
+  "skip": {}
+}
