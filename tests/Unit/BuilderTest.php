@@ -2,20 +2,20 @@
 /**
  * Tests for building bundles in steps.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Bundle\Builder;
-use AryanX\UpdateRehearsal\Bundle\Code;
-use AryanX\UpdateRehearsal\Bundle\Database;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Settings;
-use AryanX\UpdateRehearsal\TestUrls;
-use AryanX\UpdateRehearsal\Tests\Doubles\Theme;
-use AryanX\UpdateRehearsal\Updates;
+use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
+use AryanX\Axle\UpdateRehearsal\Bundle\Code;
+use AryanX\Axle\UpdateRehearsal\Bundle\Database;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\TestUrls;
+use AryanX\Axle\UpdateRehearsal\Tests\Doubles\Theme;
+use AryanX\Axle\UpdateRehearsal\Updates;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;

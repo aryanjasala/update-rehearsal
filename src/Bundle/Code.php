@@ -2,16 +2,16 @@
 /**
  * The wp-content code that goes into the copy.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Bundle;
+namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Service;
-use AryanX\UpdateRehearsal\Settings;
-use const AryanX\UpdateRehearsal\PLUGIN_FILE;
-use const AryanX\UpdateRehearsal\VERSION;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Service;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use const AryanX\Axle\UpdateRehearsal\PLUGIN_FILE;
+use const AryanX\Axle\UpdateRehearsal\VERSION;
 
 defined( 'ABSPATH' ) || exit;
 

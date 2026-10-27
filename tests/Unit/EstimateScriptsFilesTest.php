@@ -2,17 +2,17 @@
 /**
  * Tests for the size estimate, the Playground scripts and the file helpers.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Bundle\Code;
-use AryanX\UpdateRehearsal\Bundle\Database;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Bundle\Files;
-use AryanX\UpdateRehearsal\Bundle\Scripts;
-use AryanX\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Bundle\Code;
+use AryanX\Axle\UpdateRehearsal\Bundle\Database;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Bundle\Files;
+use AryanX\Axle\UpdateRehearsal\Bundle\Scripts;
+use AryanX\Axle\UpdateRehearsal\Limits;
 use Brain\Monkey\Filters;
 use Mockery;
 

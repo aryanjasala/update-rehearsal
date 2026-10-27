@@ -2,12 +2,12 @@
 /**
  * How big a bundle would be.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Bundle;
+namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
-use AryanX\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Limits;
 
 defined( 'ABSPATH' ) || exit;
 

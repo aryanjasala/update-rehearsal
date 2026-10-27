@@ -2,12 +2,12 @@
 /**
  * Tests for cleaning reports from the browser.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Report;
+use AryanX\Axle\UpdateRehearsal\Report;
 use Brain\Monkey\Filters;
 
 /**

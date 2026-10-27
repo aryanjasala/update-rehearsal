@@ -2,16 +2,16 @@
 /**
  * `wp update-rehearsal` commands.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Cli;
+namespace AryanX\Axle\UpdateRehearsal\Cli;
 
-use AryanX\UpdateRehearsal\Bundle\Builder;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Settings;
-use AryanX\UpdateRehearsal\Updates;
+use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Updates;
 
 defined( 'ABSPATH' ) || exit;
 

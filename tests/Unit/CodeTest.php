@@ -2,13 +2,13 @@
 /**
  * Tests for the code that goes into the copy.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Bundle\Code;
-use AryanX\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Bundle\Code;
+use AryanX\Axle\UpdateRehearsal\Settings;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 
@@ -114,7 +114,7 @@ final class CodeTest extends PluginTestCase {
 	public function test_skipped_paths_filter(): void {
 		Filters\expectApplied( 'update_rehearsal_skipped_paths' )->once()->andReturn( array() );
 
-		$files = array_column( Code::walk( WP_CONTENT_DIR . '/plugins/shop-kit', 'wp-content/plugins/shop-kit', \AryanX\UpdateRehearsal\Limits::skipped_paths() ), 1 );
+		$files = array_column( Code::walk( WP_CONTENT_DIR . '/plugins/shop-kit', 'wp-content/plugins/shop-kit', \AryanX\Axle\UpdateRehearsal\Limits::skipped_paths() ), 1 );
 		$this->assertContains( 'wp-content/plugins/shop-kit/node_modules/big.js', $files );
 		$this->assertContains( 'wp-content/plugins/shop-kit/.git/HEAD', $files );
 		$this->assertContains( 'wp-content/plugins/shop-kit/tests/ShopTest.php', $files );

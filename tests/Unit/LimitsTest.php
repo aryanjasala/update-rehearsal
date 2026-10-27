@@ -2,12 +2,12 @@
 /**
  * Tests for the filtered limits and lists.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Limits;
 use Brain\Monkey\Filters;
 
 /**

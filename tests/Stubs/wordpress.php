@@ -2,7 +2,7 @@
 /**
  * Minimal stand-ins for WordPress classes and constants used in unit tests.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
 // phpcs:ignoreFile

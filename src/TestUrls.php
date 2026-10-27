@@ -2,10 +2,10 @@
 /**
  * The pages a rehearsal requests before and after the update.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
 defined( 'ABSPATH' ) || exit;
 

@@ -2,14 +2,14 @@
 /**
  * Database export for the rehearsal copy.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Bundle;
+namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Settings;
 
 defined( 'ABSPATH' ) || exit;
 

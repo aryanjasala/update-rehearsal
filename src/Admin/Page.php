@@ -2,23 +2,23 @@
 /**
  * Tools > Update Rehearsal.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Admin;
+namespace AryanX\Axle\UpdateRehearsal\Admin;
 
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Bundle\Scripts;
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Report;
-use AryanX\UpdateRehearsal\Rest\Controller;
-use AryanX\UpdateRehearsal\Service;
-use AryanX\UpdateRehearsal\Settings;
-use AryanX\UpdateRehearsal\TestUrls;
-use AryanX\UpdateRehearsal\Updates;
-use const AryanX\UpdateRehearsal\PLUGIN_FILE;
-use const AryanX\UpdateRehearsal\VERSION;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Bundle\Scripts;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Report;
+use AryanX\Axle\UpdateRehearsal\Rest\Controller;
+use AryanX\Axle\UpdateRehearsal\Service;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\TestUrls;
+use AryanX\Axle\UpdateRehearsal\Updates;
+use const AryanX\Axle\UpdateRehearsal\PLUGIN_FILE;
+use const AryanX\Axle\UpdateRehearsal\VERSION;
 
 defined( 'ABSPATH' ) || exit;
 
