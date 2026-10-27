@@ -2,14 +2,14 @@
 /**
  * Tests for the pages a rehearsal checks.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Settings;
-use AryanX\UpdateRehearsal\TestUrls;
-use AryanX\UpdateRehearsal\Tests\Doubles\Post;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\TestUrls;
+use AryanX\Axle\UpdateRehearsal\Tests\Doubles\Post;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 

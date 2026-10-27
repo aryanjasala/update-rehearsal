@@ -2,18 +2,18 @@
 /**
  * REST routes for the rehearsal screen.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Rest;
+namespace AryanX\Axle\UpdateRehearsal\Rest;
 
-use AryanX\UpdateRehearsal\Admin\Page;
-use AryanX\UpdateRehearsal\Bundle\Builder;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Bundle\Files;
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Service;
-use AryanX\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Admin\Page;
+use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Bundle\Files;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Service;
+use AryanX\Axle\UpdateRehearsal\Settings;
 
 defined( 'ABSPATH' ) || exit;
 

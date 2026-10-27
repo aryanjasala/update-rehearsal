@@ -25,12 +25,12 @@
   },
   "autoload": {
     "psr-4": {
-      "AryanX\\UpdateRehearsal\\": "src/"
+      "AryanX\\Axle\\UpdateRehearsal\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "AryanX\\UpdateRehearsal\\Tests\\": "tests/"
+      "AryanX\\Axle\\UpdateRehearsal\\Tests\\": "tests/"
     }
   },
   "config": {

@@ -2,12 +2,12 @@
 /**
  * Shared set-up for Update Rehearsal tests.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Tests\Doubles\FakeWpdb;
+use AryanX\Axle\UpdateRehearsal\Tests\Doubles\FakeWpdb;
 use Brain\Monkey\Functions;
 
 require_once dirname( __DIR__ ) . '/Doubles/wordpress.php';
@@ -19,9 +19,9 @@ defined( 'ARRAY_A' ) || define( 'ARRAY_A', 'ARRAY_A' );
 defined( 'OBJECT' ) || define( 'OBJECT', 'OBJECT' );
 
 // The plugin's main file defines these; tests load classes without it.
-if ( ! defined( 'AryanX\UpdateRehearsal\VERSION' ) ) {
-	define( 'AryanX\UpdateRehearsal\VERSION', '1.0.0' );
-	define( 'AryanX\UpdateRehearsal\PLUGIN_FILE', dirname( __DIR__, 2 ) . '/update-rehearsal.php' );
+if ( ! defined( 'AryanX\Axle\UpdateRehearsal\VERSION' ) ) {
+	define( 'AryanX\Axle\UpdateRehearsal\VERSION', '1.0.0' );
+	define( 'AryanX\Axle\UpdateRehearsal\PLUGIN_FILE', dirname( __DIR__, 2 ) . '/update-rehearsal.php' );
 }
 
 /**

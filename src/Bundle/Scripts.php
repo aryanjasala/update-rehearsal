@@ -2,10 +2,10 @@
 /**
  * PHP that runs inside the Playground copy.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Bundle;
+namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
 defined( 'ABSPATH' ) || exit;
 

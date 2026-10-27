@@ -2,13 +2,13 @@
 /**
  * Tests for pending updates and package downloads.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Tests\Doubles\Theme;
-use AryanX\UpdateRehearsal\Updates;
+use AryanX\Axle\UpdateRehearsal\Tests\Doubles\Theme;
+use AryanX\Axle\UpdateRehearsal\Updates;
 use Brain\Monkey\Functions;
 
 /**

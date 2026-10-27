@@ -2,17 +2,17 @@
 /**
  * Builds rehearsal bundles in steps.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Bundle;
+namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Settings;
-use AryanX\UpdateRehearsal\TestUrls;
-use AryanX\UpdateRehearsal\Updates;
-use const AryanX\UpdateRehearsal\PLUGIN_FILE;
-use const AryanX\UpdateRehearsal\VERSION;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\TestUrls;
+use AryanX\Axle\UpdateRehearsal\Updates;
+use const AryanX\Axle\UpdateRehearsal\PLUGIN_FILE;
+use const AryanX\Axle\UpdateRehearsal\VERSION;
 
 defined( 'ABSPATH' ) || exit;
 

@@ -5,12 +5,12 @@
  * shared stubs do not cover. The shared stubs in tests/Stubs come from the
  * repo template; these are this plugin's own.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
 // phpcs:ignoreFile
 
-namespace AryanX\UpdateRehearsal\Tests\Doubles;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Doubles;
 
 /**
  * A $wpdb that answers queries from a script: regex => rows or callable.
@@ -114,7 +114,7 @@ class Post extends \WP_Post {
 	public $post_status = 'publish';
 }
 
-namespace AryanX\UpdateRehearsal\Tests\Doubles;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Doubles;
 
 /**
  * A user with the fields the plugin reads.

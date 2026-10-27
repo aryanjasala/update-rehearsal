@@ -2,12 +2,12 @@
 /**
  * Abilities: read rehearsal reports and the bundle size estimate.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
-use AryanX\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
 
 defined( 'ABSPATH' ) || exit;
 

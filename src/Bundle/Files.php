@@ -2,10 +2,10 @@
 /**
  * File work in the bundle folder.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Bundle;
+namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
 defined( 'ABSPATH' ) || exit;
 

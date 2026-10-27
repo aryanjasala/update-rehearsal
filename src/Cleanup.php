@@ -2,12 +2,12 @@
 /**
  * Hourly clean-up of old bundles and reports.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
-use AryanX\UpdateRehearsal\Bundle\Builder;
+use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
 
 defined( 'ABSPATH' ) || exit;
 

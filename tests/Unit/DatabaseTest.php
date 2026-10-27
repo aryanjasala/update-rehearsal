@@ -2,14 +2,14 @@
 /**
  * Tests for the database export: tables, exclusions, scrubbing and SQL.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Bundle\Database;
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Bundle\Database;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Settings;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 

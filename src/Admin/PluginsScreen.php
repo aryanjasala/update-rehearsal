@@ -2,16 +2,16 @@
 /**
  * Rehearsal results on the Plugins screen.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Admin;
+namespace AryanX\Axle\UpdateRehearsal\Admin;
 
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Report;
-use AryanX\UpdateRehearsal\Service;
-use AryanX\UpdateRehearsal\Settings;
-use const AryanX\UpdateRehearsal\VERSION;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Report;
+use AryanX\Axle\UpdateRehearsal\Service;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use const AryanX\Axle\UpdateRehearsal\VERSION;
 
 defined( 'ABSPATH' ) || exit;
 

@@ -2,10 +2,10 @@
 /**
  * Limits, lists and addresses, each with a filter.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
 defined( 'ABSPATH' ) || exit;
 

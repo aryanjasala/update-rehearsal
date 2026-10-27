@@ -2,15 +2,15 @@
 /**
  * Tests for the REST routes.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Bundle\Builder;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Rest\Controller;
+use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Rest\Controller;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;

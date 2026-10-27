@@ -12,17 +12,17 @@
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       update-rehearsal
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
 defined( 'ABSPATH' ) || exit;
 
 const VERSION     = '1.0.0';
 const PLUGIN_FILE = __FILE__;
 
-// PSR-4: AryanX\UpdateRehearsal\Foo\Bar lives in src/Foo/Bar.php.
+// PSR-4: AryanX\Axle\UpdateRehearsal\Foo\Bar lives in src/Foo/Bar.php.
 spl_autoload_register(
 	static function ( $class_name ) {
 		$prefix = __NAMESPACE__ . '\\';

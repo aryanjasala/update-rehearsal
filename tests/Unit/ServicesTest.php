@@ -2,25 +2,25 @@
 /**
  * Tests for the abilities, privacy tools, clean-up, Site Health and the admin screens.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Abilities;
-use AryanX\UpdateRehearsal\Admin\Page;
-use AryanX\UpdateRehearsal\Admin\PluginsScreen;
-use AryanX\UpdateRehearsal\Bundle\Builder;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Cleanup;
-use AryanX\UpdateRehearsal\Health\SiteHealth;
-use AryanX\UpdateRehearsal\Privacy;
-use AryanX\UpdateRehearsal\Rehearsals;
-use AryanX\UpdateRehearsal\Settings;
-use AryanX\UpdateRehearsal\TestUrls;
-use AryanX\UpdateRehearsal\Tests\Doubles\Post;
-use AryanX\UpdateRehearsal\Tests\Doubles\User;
-use AryanX\UpdateRehearsal\Updates;
+use AryanX\Axle\UpdateRehearsal\Abilities;
+use AryanX\Axle\UpdateRehearsal\Admin\Page;
+use AryanX\Axle\UpdateRehearsal\Admin\PluginsScreen;
+use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Cleanup;
+use AryanX\Axle\UpdateRehearsal\Health\SiteHealth;
+use AryanX\Axle\UpdateRehearsal\Privacy;
+use AryanX\Axle\UpdateRehearsal\Rehearsals;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\TestUrls;
+use AryanX\Axle\UpdateRehearsal\Tests\Doubles\Post;
+use AryanX\Axle\UpdateRehearsal\Tests\Doubles\User;
+use AryanX\Axle\UpdateRehearsal\Updates;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;

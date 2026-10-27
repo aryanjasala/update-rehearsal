@@ -2,10 +2,10 @@
 /**
  * Personal data export, erase and the privacy policy text.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
 defined( 'ABSPATH' ) || exit;
 

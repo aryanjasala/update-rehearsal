@@ -2,12 +2,12 @@
 /**
  * Tests for the settings.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Tests\Unit;
+namespace AryanX\Axle\UpdateRehearsal\Tests\Unit;
 
-use AryanX\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Settings;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 

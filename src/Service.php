@@ -2,10 +2,10 @@
 /**
  * Contract for classes that hook into WordPress.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal;
+namespace AryanX\Axle\UpdateRehearsal;
 
 defined( 'ABSPATH' ) || exit;
 

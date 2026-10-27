@@ -2,15 +2,15 @@
 /**
  * Site Health check.
  *
- * @package AryanX\UpdateRehearsal
+ * @package AryanX\Axle\UpdateRehearsal
  */
 
-namespace AryanX\UpdateRehearsal\Health;
+namespace AryanX\Axle\UpdateRehearsal\Health;
 
-use AryanX\UpdateRehearsal\Admin\Page;
-use AryanX\UpdateRehearsal\Bundle\Estimate;
-use AryanX\UpdateRehearsal\Limits;
-use AryanX\UpdateRehearsal\Service;
+use AryanX\Axle\UpdateRehearsal\Admin\Page;
+use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Service;
 
 defined( 'ABSPATH' ) || exit;
 
