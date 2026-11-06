@@ -366,6 +366,7 @@ final class ServicesTest extends PluginTestCase {
 
 	public function test_assets_pass_the_config_before_the_script(): void {
 		Functions\when( 'wp_enqueue_style' )->justReturn( true );
+		Functions\when( 'plugins_url' )->justReturn( 'https://example.test/wp-content/plugins/update-rehearsal/assets/axle-ui.css' );
 		Functions\expect( 'wp_enqueue_script' )->once()->with( 'update-rehearsal', Mockery::type( 'string' ), array( 'update-rehearsal-core', 'wp-api-fetch', 'wp-hooks', 'wp-i18n' ), '1.0.0', true );
 		Functions\when( 'wp_register_script' )->justReturn( true );
 		Functions\when( 'wp_set_script_translations' )->justReturn( true );
