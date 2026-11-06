@@ -101,7 +101,8 @@
 	 */
 	function badge( verdict ) {
 		const key = VERDICT_WORDS[ verdict ] ? verdict : 'failed';
-		return h( 'span', { className: 'urh-badge urh-' + key }, VERDICT_WORDS[ key ]() );
+		const tone = { green: 'good', amber: 'warning', red: 'error', failed: 'error' }[ key ];
+		return h( 'span', { className: 'axle-badge axle-badge--' + tone + ' urh-badge urh-' + key }, VERDICT_WORDS[ key ]() );
 	}
 
 	// ---------------------------------------------------------------------
@@ -384,7 +385,7 @@
 		const result = h( 'div', { className: 'urh-result' } );
 		const copy = h( 'details', { className: 'urh-copy', open: true }, h( 'summary', null, __( 'The copy, running in your browser', 'update-rehearsal' ) ), frame );
 		panel.append(
-			h( 'h2', null, __( 'Rehearsal', 'update-rehearsal' ) ),
+			h( 'h2', { className: 'axle-card__title' }, __( 'Rehearsal', 'update-rehearsal' ) ),
 			list,
 			bar,
 			status,
@@ -649,7 +650,7 @@
 
 		const body = h( 'div', { className: 'urh-report-body' } );
 		const parts = [
-			h( 'div', { className: 'urh-verdict urh-verdict-' + verdict }, badge( verdict ), h( 'p', { className: 'urh-headline' }, headline ) ),
+			h( 'div', { className: 'axle-card urh-verdict urh-verdict-' + verdict }, badge( verdict ), h( 'p', { className: 'urh-headline' }, headline ) ),
 			report.error ? h( 'p', { className: 'urh-error' }, report.error ) : null,
 			( report.reasons || [] ).length ? h( 'ul', { className: 'urh-reasons' }, report.reasons.slice( 0, 12 ).map( ( reason ) => h( 'li', null, reason ) ) ) : null,
 			meta( stored, report ),
@@ -678,7 +679,7 @@
 		}
 		return h(
 			'dl',
-			{ className: 'urh-meta' },
+			{ className: 'axle-facts urh-meta' },
 			h( 'dt', null, __( 'Rehearsed', 'update-rehearsal' ) ),
 			h( 'dd', null, items.join( ', ' ) || '-' ),
 			// The server formats the time in the site's own format and time zone.
@@ -747,7 +748,7 @@
 		};
 		const box = h(
 			'div',
-			{ className: 'notice inline urh-confirm urh-confirm-' + ask.level, role: 'alertdialog', 'aria-labelledby': 'urh-confirm-title', 'aria-describedby': 'urh-confirm-reasons', tabindex: '-1' },
+			{ className: 'notice notice-' + ( 'red' === ask.level ? 'error' : 'warning' ) + ' inline urh-confirm urh-confirm-' + ask.level, role: 'alertdialog', 'aria-labelledby': 'urh-confirm-title', 'aria-describedby': 'urh-confirm-reasons', tabindex: '-1' },
 			h( 'p', { id: 'urh-confirm-title' }, h( 'strong', null, title ) ),
 			h(
 				'ul',
@@ -758,7 +759,7 @@
 			h(
 				'p',
 				{ className: 'urh-confirm-actions' },
-				h( 'a', { className: 'button urh-confirm-yes', href: link.getAttribute( 'href' ) }, __( 'Update anyway', 'update-rehearsal' ) ),
+				h( 'a', { className: 'button axle-button--danger urh-confirm-yes', href: link.getAttribute( 'href' ) }, __( 'Update anyway', 'update-rehearsal' ) ),
 				' ',
 				h( 'button', { type: 'button', className: 'button button-primary urh-confirm-no', onClick: close }, __( 'Cancel', 'update-rehearsal' ) )
 			)
@@ -787,8 +788,8 @@
 		}
 		return h(
 			'div',
-			null,
-			h( 'h3', null, __( 'New PHP errors by plugin or theme', 'update-rehearsal' ) ),
+			{ className: 'axle-card' },
+			h( 'h3', { className: 'axle-card__title' }, __( 'New PHP errors by plugin or theme', 'update-rehearsal' ) ),
 			h(
 				'div',
 				{ className: 'urh-table-scroll' },
@@ -827,14 +828,19 @@
 		if ( ! errors.length ) {
 			return null;
 		}
+		const tones = { fatal: 'error', database: 'error', warning: 'warning', notice: 'info', deprecated: 'neutral' };
 		return h(
+			'div',
+			{ className: 'axle-card' },
+			h( 'h3', { className: 'axle-card__title' }, __( 'Error messages', 'update-rehearsal' ) ),
+			h(
 			'ul',
 			{ className: 'urh-errors' },
 			errors.map( ( error ) =>
 				h(
 					'li',
 					{ className: 'urh-error-' + ( error.fatal ? 'fatal' : error.level ) },
-					h( 'span', { className: 'urh-level' }, ( LEVEL_WORDS[ error.fatal ? 'fatal' : error.level ] || LEVEL_WORDS.warning )() ),
+					h( 'span', { className: 'axle-badge axle-badge--' + ( tones[ error.fatal ? 'fatal' : error.level ] || 'warning' ) + ' urh-level' }, ( LEVEL_WORDS[ error.fatal ? 'fatal' : error.level ] || LEVEL_WORDS.warning )() ),
 					' ',
 					h( 'strong', null, ( error.source && error.source.name ) || '' ),
 					': ',
@@ -842,6 +848,7 @@
 					error.file ? h( 'span', { className: 'urh-where' }, ' ' + error.file.replace( /^\/wordpress\//, '' ) + ( error.line ? ':' + error.line : '' ) ) : null,
 					h( 'span', { className: 'urh-pages-hit' }, ' (' + ( error.urls || [] ).join( ', ' ) + ')' )
 				)
+			)
 			)
 		);
 	}
@@ -862,8 +869,8 @@
 		const time = ( side ) => ( side.status ? h( 'bdi', null, sprintf( /* translators: 1: HTTP status, 2: milliseconds. */ __( '%1$d · %2$d ms', 'update-rehearsal' ), side.status, side.ms ) ) : '-' );
 		return h(
 			'div',
-			null,
-			h( 'h3', null, __( 'Pages', 'update-rehearsal' ) ),
+			{ className: 'axle-card' },
+			h( 'h3', { className: 'axle-card__title' }, __( 'Pages', 'update-rehearsal' ) ),
 			h(
 				'div',
 				{ className: 'urh-table-scroll' },
@@ -973,7 +980,7 @@
 		const closeButton = h( 'button', { type: 'button', className: 'button urh-compare-close' }, __( 'Close', 'update-rehearsal' ) );
 		const box = h(
 			'div',
-			{ className: 'urh-compare', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'urh-compare-title', 'aria-describedby': 'urh-compare-note' },
+			{ className: 'axle-ui urh-compare', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'urh-compare-title', 'aria-describedby': 'urh-compare-note' },
 			h(
 				'div',
 				{ className: 'urh-compare-head' },
@@ -1039,8 +1046,8 @@
 		}
 		return h(
 			'div',
-			{ className: 'urh-tables-failed' },
-			h( 'h3', null, __( 'Tables that did not fully load into the copy', 'update-rehearsal' ) ),
+			{ className: 'axle-card urh-tables-failed' },
+			h( 'h3', { className: 'axle-card__title' }, __( 'Tables that did not fully load into the copy', 'update-rehearsal' ) ),
 			h( 'p', { className: 'description' }, __( 'The copy runs on SQLite. Pages that use these tables may behave differently in the copy, before and after alike.', 'update-rehearsal' ) ),
 			h( 'ul', null, tables.map( ( table ) => h( 'li', null, h( 'code', null, table.table ), ' ', table.error ) ) )
 		);
