@@ -147,7 +147,8 @@ final class Page implements Service {
 		}
 
 		$base = plugin_dir_url( PLUGIN_FILE );
-		wp_enqueue_style( 'update-rehearsal', $base . 'assets/admin.css', array(), VERSION );
+		AxleUi::enqueue();
+		wp_enqueue_style( 'update-rehearsal', $base . 'assets/admin.css', array( AxleUi::HANDLE ), VERSION );
 		wp_register_script( 'update-rehearsal-core', $base . 'assets/js/rehearsal-core.js', array(), VERSION, true );
 		wp_enqueue_script( 'update-rehearsal', $base . 'assets/js/admin.js', array( 'update-rehearsal-core', 'wp-api-fetch', 'wp-hooks', 'wp-i18n' ), VERSION, true );
 		wp_set_script_translations( 'update-rehearsal', 'update-rehearsal' );
@@ -229,11 +230,13 @@ final class Page implements Service {
 		$id  = isset( $_GET['rehearsal'] ) ? absint( $_GET['rehearsal'] ) : 0;
 		// phpcs:enable
 
-		echo '<div class="wrap urh-wrap">';
-		echo '<h1>' . esc_html__( 'Update Rehearsal', 'update-rehearsal' ) . '</h1>';
+		echo '<div class="wrap axle-ui urh-wrap">';
+		echo '<h1 class="wp-heading-inline">' . esc_html__( 'Update Rehearsal', 'update-rehearsal' ) . '</h1>';
+		echo '<hr class="wp-header-end">';
 
 		if ( $id ) {
 			$this->render_report( $id );
+			AxleUi::footer();
 			echo '</div>';
 			return;
 		}
@@ -255,12 +258,15 @@ final class Page implements Service {
 		}
 
 		if ( 'history' === $tab ) {
+			echo '<p class="axle-intro">' . esc_html__( 'Every rehearsal you ran, newest first. Open one to see its report.', 'update-rehearsal' ) . '</p>';
 			$this->render_history();
 		} elseif ( 'settings' === $tab ) {
+			echo '<p class="axle-intro">' . esc_html__( 'What goes into the copy, and which pages a rehearsal checks.', 'update-rehearsal' ) . '</p>';
 			$this->render_settings();
 		} else {
 			$this->render_rehearse();
 		}
+		AxleUi::footer();
 		echo '</div>';
 	}
 
@@ -275,7 +281,7 @@ final class Page implements Service {
 		$preselect = isset( $_GET['rehearse'] ) ? sanitize_text_field( wp_unslash( $_GET['rehearse'] ) ) : '';
 		$php       = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
 		?>
-		<div class="urh-intro">
+		<div class="axle-intro urh-intro">
 			<p><?php esc_html_e( 'Try updates on a disposable copy of this site before you run them for real. The copy runs in WordPress Playground, inside your browser. Nothing on this site changes.', 'update-rehearsal' ); ?></p>
 			<?php if ( is_multisite() ) : ?>
 				<p><?php esc_html_e( 'This is a network: the copy is of the main site only.', 'update-rehearsal' ); ?></p>
@@ -283,7 +289,8 @@ final class Page implements Service {
 		</div>
 
 		<div id="urh-setup" class="urh-setup">
-			<h2><?php esc_html_e( '1. What to rehearse', 'update-rehearsal' ); ?></h2>
+			<section class="axle-card">
+			<h2 class="axle-card__title"><?php esc_html_e( '1. What to rehearse', 'update-rehearsal' ); ?></h2>
 			<?php if ( $updates ) : ?>
 				<table class="widefat striped urh-updates">
 					<thead>
@@ -302,7 +309,7 @@ final class Page implements Service {
 								</th>
 								<td>
 									<label for="urh-item-<?php echo esc_attr( md5( $item['key'] ) ); ?>"><strong><?php echo esc_html( $item['name'] ); ?></strong></label>
-									<span class="urh-type"><?php echo esc_html( self::type_label( $item['type'] ) ); ?></span>
+									<span class="axle-badge axle-badge--neutral urh-type"><?php echo esc_html( self::type_label( $item['type'] ) ); ?></span>
 									<?php if ( ! $item['active'] ) : ?>
 										<br><span class="urh-muted urh-inactive"><?php esc_html_e( 'Inactive: it cannot change the pages a rehearsal checks.', 'update-rehearsal' ); ?></span>
 									<?php endif; ?>
@@ -310,7 +317,7 @@ final class Page implements Service {
 								<td><?php echo esc_html( $item['from'] . ' → ' . $item['to'] ); ?></td>
 								<td>
 									<?php if ( $item['latest'] ) : ?>
-										<a href="<?php echo esc_url( $item['latest']['url'] ); ?>" class="urh-badge urh-<?php echo esc_attr( $item['latest']['verdict'] ); ?>">
+										<a href="<?php echo esc_url( $item['latest']['url'] ); ?>" class="axle-badge axle-badge--<?php echo esc_attr( self::verdict_tone( (string) $item['latest']['verdict'] ) ); ?> urh-badge urh-<?php echo esc_attr( $item['latest']['verdict'] ); ?>">
 											<?php
 											/* translators: 1: time ago, such as "2 hours", 2: green, amber or red. */
 											echo esc_html( sprintf( __( '%1$s ago: %2$s', 'update-rehearsal' ), $item['latest']['ago'], $item['latest']['word'] ) );
@@ -348,8 +355,10 @@ final class Page implements Service {
 				</select>
 				<span class="description"><?php esc_html_e( 'Pick another version to rehearse a PHP upgrade, with or without updates.', 'update-rehearsal' ); ?></span>
 			</p>
+			</section>
 
-			<h2><?php esc_html_e( '2. Pages to check', 'update-rehearsal' ); ?></h2>
+			<section class="axle-card">
+			<h2 class="axle-card__title"><?php esc_html_e( '2. Pages to check', 'update-rehearsal' ); ?></h2>
 			<p class="description">
 				<?php esc_html_e( 'Each page is requested before and after the update. Admin screens are checked for errors only, since their content changes with every version.', 'update-rehearsal' ); ?>
 				<a href="<?php echo esc_url( self::url( array( 'tab' => 'settings' ) ) ); ?>"><?php esc_html_e( 'Add pages', 'update-rehearsal' ); ?></a>
@@ -359,8 +368,10 @@ final class Page implements Service {
 					<li><code><?php echo esc_html( $url['path'] ); ?></code> <?php echo esc_html( $url['label'] ); ?></li>
 				<?php endforeach; ?>
 			</ul>
+			</section>
 
-			<h2><?php esc_html_e( '3. Size of the copy', 'update-rehearsal' ); ?></h2>
+			<section class="axle-card">
+			<h2 class="axle-card__title"><?php esc_html_e( '3. Size of the copy', 'update-rehearsal' ); ?></h2>
 			<div class="urh-estimate-region" aria-live="polite">
 				<?php echo self::estimate_html( $estimate ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in estimate_html(). ?>
 			</div>
@@ -374,9 +385,10 @@ final class Page implements Service {
 				echo esc_html( sprintf( __( 'Start loads WordPress Playground from %s into this page. Your site\'s data goes from this site to your browser only.', 'update-rehearsal' ), (string) wp_parse_url( Limits::playground_remote_url(), PHP_URL_HOST ) ) );
 				?>
 			</p>
+			</section>
 		</div>
 
-		<div id="urh-run" class="urh-run" hidden></div>
+		<div id="urh-run" class="axle-card urh-run" hidden></div>
 		<?php
 	}
 
@@ -442,7 +454,7 @@ final class Page implements Service {
 			)
 		);
 		if ( ! $found['items'] ) {
-			echo '<p class="urh-muted">' . esc_html__( 'No rehearsals yet.', 'update-rehearsal' ) . '</p>';
+			echo '<div class="axle-empty"><p>' . esc_html__( 'No rehearsals yet. Start one on the Rehearse tab and its report shows up here.', 'update-rehearsal' ) . '</p></div>';
 			return;
 		}
 		?>
@@ -460,7 +472,7 @@ final class Page implements Service {
 				<?php foreach ( $found['items'] as $item ) : ?>
 					<tr>
 						<td><a class="row-title" href="<?php echo esc_url( self::url( array( 'rehearsal' => $item['id'] ) ) ); ?>"><?php echo esc_html( $item['title'] ); ?></a></td>
-						<td><span class="urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></td>
+						<td><span class="axle-badge axle-badge--<?php echo esc_attr( self::verdict_tone( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ) ); ?> urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></td>
 						<td><?php echo esc_html( (string) $item['pages'] ); ?></td>
 						<td><?php echo esc_html( $item['user'] ); ?></td>
 						<td>
@@ -511,7 +523,7 @@ final class Page implements Service {
 		?>
 		<h2 class="urh-report-title"><?php echo esc_html( $item['title'] ); ?></h2>
 		<div id="urh-report" class="urh-report" data-rehearsal="<?php echo esc_attr( (string) $item['id'] ); ?>">
-			<p class="urh-verdict-line"><span class="urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></p>
+			<p class="urh-verdict-line"><span class="axle-badge axle-badge--<?php echo esc_attr( self::verdict_tone( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ) ); ?> urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></p>
 		</div>
 		<?php
 	}
@@ -524,6 +536,7 @@ final class Page implements Service {
 		// Only the tables are needed here, so the code is not measured.
 		$estimate = $this->estimate->get( false );
 		?>
+		<section class="axle-card">
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="urh-settings">
 			<input type="hidden" name="action" value="update_rehearsal_settings">
 			<?php wp_nonce_field( 'update_rehearsal_settings' ); ?>
@@ -586,6 +599,7 @@ final class Page implements Service {
 			</table>
 			<?php submit_button(); ?>
 		</form>
+		</section>
 		<?php
 	}
 
@@ -618,6 +632,23 @@ final class Page implements Service {
 			)
 		);
 		exit;
+	}
+
+	/**
+	 * The Axle tone of a verdict.
+	 *
+	 * @param string $verdict green, amber, red or failed.
+	 * @return string
+	 */
+	public static function verdict_tone( string $verdict ): string {
+		$tones = array(
+			'green'  => 'good',
+			'amber'  => 'warning',
+			'red'    => 'error',
+			'failed' => 'error',
+		);
+
+		return $tones[ $verdict ] ?? 'neutral';
 	}
 
 	/**
