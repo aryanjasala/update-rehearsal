@@ -1,13 +1,4 @@
-/* Update Rehearsal: Tools > Update Rehearsal. */
-
-.urh-wrap .urh-intro {
-	max-width: 760px;
-	font-size: 14px;
-}
-
-.urh-setup h2 {
-	margin-top: 1.8em;
-}
+/* Tools > Update Rehearsal. Layout only: components, tones and colours come from axle-ui.css. */
 
 .urh-updates {
 	max-width: 900px;
@@ -18,18 +9,8 @@
 	vertical-align: middle;
 }
 
-.urh-type {
-	display: inline-block;
-	margin-left: 6px;
-	padding: 0 6px;
-	border-radius: 3px;
-	background: #f0f0f1;
-	color: #50575e;
-	font-size: 12px;
-}
-
 .urh-muted {
-	color: #646970;
+	color: var(--axle-muted);
 }
 
 .urh-php label {
@@ -55,13 +36,6 @@
 
 .urh-estimate {
 	max-width: 900px;
-	padding: 4px 14px;
-	border-left: 4px solid #72aee6;
-	background: #fff;
-}
-
-.urh-estimate-over {
-	border-left-color: #d63638;
 }
 
 .urh-estimate .spinner {
@@ -78,36 +52,6 @@
 	margin-top: 1.5em;
 }
 
-.urh-badge {
-	display: inline-block;
-	padding: 1px 10px;
-	border-radius: 10px;
-	background: #a7aaad;
-	color: #fff;
-	font-weight: 600;
-	text-decoration: none;
-	font-size: 12px;
-}
-
-a.urh-badge:hover,
-a.urh-badge:focus {
-	color: #fff;
-	filter: brightness(1.1);
-}
-
-.urh-badge.urh-green {
-	background: #008a20;
-}
-
-.urh-badge.urh-amber {
-	background: #996800;
-}
-
-.urh-badge.urh-red,
-.urh-badge.urh-failed {
-	background: #d63638;
-}
-
 /* The run. */
 
 .urh-run {
@@ -120,12 +64,12 @@ a.urh-badge:focus {
 }
 
 .urh-step {
-	color: #646970;
+	color: var(--axle-muted);
 	break-inside: avoid;
 }
 
 .urh-step-active {
-	color: #1d2327;
+	color: inherit;
 	font-weight: 600;
 }
 
@@ -135,7 +79,7 @@ a.urh-badge:focus {
 	width: 10px;
 	height: 10px;
 	margin-left: 6px;
-	border: 2px solid #2271b1;
+	border: 2px solid var(--axle-accent);
 	border-right-color: transparent;
 	border-radius: 50%;
 	animation: urh-spin 0.8s linear infinite;
@@ -143,21 +87,21 @@ a.urh-badge:focus {
 }
 
 .urh-step-done {
-	color: #1d2327;
+	color: inherit;
 }
 
 .urh-step-done .urh-step-label::before {
 	content: "\2713\00a0";
-	color: #008a20;
+	color: var(--axle-good-text);
 }
 
 .urh-step-failed {
-	color: #d63638;
+	color: var(--axle-error-text);
 	font-weight: 600;
 }
 
 .urh-step-detail {
-	color: #646970;
+	color: var(--axle-muted);
 	font-weight: 400;
 }
 
@@ -181,7 +125,7 @@ a.urh-badge:focus {
 
 .urh-status {
 	min-height: 1.5em;
-	color: #50575e;
+	color: var(--axle-neutral-text);
 	font-family: Consolas, Monaco, monospace;
 	font-size: 12px;
 }
@@ -195,8 +139,8 @@ a.urh-badge:focus {
 .urh-frame {
 	width: 100%;
 	height: 360px;
-	border: 1px solid #c3c4c7;
-	background: #fff;
+	border: 1px solid var(--axle-border);
+	background: var(--axle-surface);
 }
 
 /* The report. */
@@ -207,18 +151,12 @@ a.urh-badge:focus {
 }
 
 .urh-broke {
-	color: #b32d2e;
+	color: var(--axle-error-text);
 }
 
 .urh-confirm {
 	max-width: 760px;
 	margin: 8px 0 16px;
-	padding: 4px 14px;
-	border-left-color: #dba617;
-}
-
-.urh-confirm-red {
-	border-left-color: #d63638;
 }
 
 .urh-confirm-actions {
@@ -231,28 +169,6 @@ a.urh-badge:focus {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	margin: 16px 0 8px;
-	padding: 12px 16px;
-	background: #fff;
-	border-left: 6px solid #a7aaad;
-}
-
-.urh-verdict .urh-badge {
-	font-size: 14px;
-	padding: 4px 14px;
-}
-
-.urh-verdict-green {
-	border-left-color: #008a20;
-}
-
-.urh-verdict-amber {
-	border-left-color: #dba617;
-}
-
-.urh-verdict-red,
-.urh-verdict-failed {
-	border-left-color: #d63638;
 }
 
 .urh-headline {
@@ -267,17 +183,7 @@ a.urh-badge:focus {
 }
 
 .urh-meta {
-	display: grid;
-	grid-template-columns: max-content 1fr;
-	gap: 2px 16px;
-}
-
-.urh-meta dt {
-	font-weight: 600;
-}
-
-.urh-meta dd {
-	margin: 0;
+	margin-bottom: 16px;
 }
 
 .urh-actions {
@@ -293,21 +199,19 @@ a.urh-badge:focus {
 }
 
 .urh-row-red td {
-	background: #fcf0f1;
+	background: var(--axle-error-bg);
 }
 
 .urh-errors {
 	max-width: 1100px;
 }
 
-.urh-errors li {
-	padding: 6px 10px;
-	background: #fff;
-	border-left: 4px solid #dba617;
+.urh-errors {
+	margin: 0;
 }
 
-.urh-errors li.urh-error-fatal {
-	border-left-color: #d63638;
+.urh-errors li {
+	margin: 0 0 8px;
 }
 
 .urh-errors code {
@@ -315,13 +219,9 @@ a.urh-badge:focus {
 	word-break: break-word;
 }
 
-.urh-level {
-	font-weight: 600;
-}
-
 .urh-where,
 .urh-pages-hit {
-	color: #646970;
+	color: var(--axle-muted);
 }
 
 .urh-diff summary {
@@ -334,11 +234,11 @@ a.urh-badge:focus {
 }
 
 .urh-removed li {
-	color: #8a2424;
+	color: var(--axle-error-text);
 }
 
 .urh-added li {
-	color: #00650f;
+	color: var(--axle-good-text);
 }
 
 .urh-compare-open {
@@ -353,8 +253,8 @@ a.urh-badge:focus {
 	display: flex;
 	flex-direction: column;
 	padding: 12px;
-	background: #fff;
-	box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+	background: var(--axle-surface);
+	box-shadow: 0 4px 30px rgb(0 0 0 / 30%);
 }
 
 .urh-compare-head {
@@ -395,7 +295,7 @@ a.urh-badge:focus {
 .urh-compare-frames iframe {
 	flex: 1;
 	width: 100%;
-	border: 1px solid #c3c4c7;
+	border: 1px solid var(--axle-border);
 }
 
 @media screen and (max-width: 782px) {
@@ -411,4 +311,12 @@ a.urh-badge:focus {
 	.urh-compare-frames {
 		grid-template-columns: 1fr;
 	}
+}
+
+.urh-run > h2:first-child {
+	margin-top: 0;
+}
+
+.urh-compare-frames iframe {
+	background: var(--axle-surface);
 }
