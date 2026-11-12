@@ -86,7 +86,7 @@ test.describe( 'Update Rehearsal: add and remove a plugin', () => {
 		await expect( page.locator( '#urh-chosen li' ) ).toContainText( 'popup-kit' );
 		await expect( page.locator( '#urh-chosen li' ) ).toContainText( 'stays in this browser' );
 		await expect( start ).toBeEnabled();
-		await page.getByRole( 'button', { name: 'Do not add popup-kit' } ).click();
+		await page.getByRole( 'button', { name: 'Remove from the list: popup-kit' } ).click();
 		await expect( page.locator( '#urh-chosen li' ) ).toHaveCount( 0 );
 		await expect( start ).toBeDisabled();
 

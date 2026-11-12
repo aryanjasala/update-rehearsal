@@ -1718,7 +1718,7 @@
 						{
 							type: 'button',
 							className: 'button-link urh-unchoose',
-							'aria-label': sprintf( /* translators: %s: plugin name. */ __( 'Do not add %s', 'update-rehearsal' ), item.name ),
+							'aria-label': sprintf( /* translators: %s: plugin name. */ __( 'Remove from the list: %s', 'update-rehearsal' ), item.name ),
 							onClick: () => {
 								chosen.splice( index, 1 );
 								renderChosen();
@@ -1743,7 +1743,7 @@
 						{
 							type: 'button',
 							className: 'button-link urh-unchoose',
-							'aria-label': sprintf( /* translators: %s: file name. */ __( 'Do not add %s', 'update-rehearsal' ), item.name ),
+							'aria-label': sprintf( /* translators: %s: file name. */ __( 'Remove from the list: %s', 'update-rehearsal' ), item.name ),
 							onClick: () => {
 								uploads.splice( index, 1 );
 								renderChosen();
