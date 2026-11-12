@@ -146,10 +146,7 @@ final class Command {
 	 * ---
 	 *
 	 * [--updates=<keys>]
-	 * : Updates to include: all, none, or keys from `wp update-rehearsal updates`, comma-separated.
-	 * ---
-	 * default: all
-	 * ---
+	 * : Updates to include: all, none, or keys from `wp update-rehearsal updates`, comma-separated. Default all, or none when --add, --remove or --delete is given.
 	 *
 	 * [--add=<slugs>]
 	 * : Rehearse adding plugins from WordPress.org: slugs, comma-separated. Then no updates are included unless you ask with --updates.
