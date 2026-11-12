@@ -13,6 +13,7 @@ use AryanX\Axle\UpdateRehearsal\Admin\PluginsScreen;
 use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
 use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
 use AryanX\Axle\UpdateRehearsal\Cleanup;
+use AryanX\Axle\UpdateRehearsal\Operations;
 use AryanX\Axle\UpdateRehearsal\Health\SiteHealth;
 use AryanX\Axle\UpdateRehearsal\Privacy;
 use AryanX\Axle\UpdateRehearsal\Rehearsals;
@@ -70,13 +71,13 @@ final class ServicesTest extends PluginTestCase {
 		);
 		Functions\expect( 'wp_register_ability_category' )->once()->with( 'update-rehearsal', Mockery::type( 'array' ) );
 
-		$service = new Abilities( Mockery::mock( Rehearsals::class ), $this->estimate() );
+		$service = new Abilities( Mockery::mock( Rehearsals::class ), $this->estimate(), Mockery::mock( Updates::class ) );
 		$service->register();
 		$this->assertNotFalse( has_action( 'wp_abilities_api_init', array( $service, 'register_abilities' ) ) );
 		$service->register_category();
 		$service->register_abilities();
 
-		$this->assertSame( array( 'update-rehearsal/list-rehearsals', 'update-rehearsal/get-rehearsal', 'update-rehearsal/get-bundle-estimate' ), array_keys( $abilities ) );
+		$this->assertSame( array( 'update-rehearsal/list-rehearsals', 'update-rehearsal/get-rehearsal', 'update-rehearsal/plan-rehearsal', 'update-rehearsal/get-bundle-estimate' ), array_keys( $abilities ) );
 		foreach ( $abilities as $args ) {
 			$this->assertTrue( $args['meta']['annotations']['readonly'] );
 			$this->assertTrue( $args['meta']['show_in_rest'] );
@@ -96,6 +97,7 @@ final class ServicesTest extends PluginTestCase {
 		$rehearsals->shouldReceive( 'list' )->once()->with(
 			array(
 				'verdict'  => 'red',
+				'kind'     => '',
 				'per_page' => 100,
 				'page'     => 1,
 			)
@@ -119,7 +121,7 @@ final class ServicesTest extends PluginTestCase {
 		$rehearsals->shouldReceive( 'get' )->with( 4 )->andReturn( $stored );
 		$rehearsals->shouldReceive( 'get' )->with( 5 )->andReturn( null );
 
-		$service = new Abilities( $rehearsals, $this->estimate() );
+		$service = new Abilities( $rehearsals, $this->estimate(), Mockery::mock( Updates::class ) );
 		$this->assertSame(
 			array( array( 'id' => 1 ) ),
 			$service->list_rehearsals(
@@ -267,7 +269,7 @@ final class ServicesTest extends PluginTestCase {
 			array(
 				'id'      => 7,
 				'verdict' => 'green',
-				'time'    => time(),
+				'time'    => time() - 7200,
 				'to'      => '2.1',
 			)
 		);
@@ -283,7 +285,8 @@ final class ServicesTest extends PluginTestCase {
 			)
 		);
 		$html = ob_get_clean();
-		$this->assertStringContainsString( 'Rehearsed 2 hours ago: green.', $html );
+		$this->assertStringContainsString( 'Rehearsed <time', $html );
+		$this->assertStringContainsString( '2 hours ago</time>: green.', $html );
 		$this->assertStringContainsString( 'rehearsal=7', $html );
 		$this->assertStringContainsString( 'urh-green', $html );
 
@@ -319,7 +322,10 @@ final class ServicesTest extends PluginTestCase {
 	 * @return Page
 	 */
 	private function page(): Page {
-		$updates = Mockery::mock( Updates::class );
+		$updates    = Mockery::mock( Updates::class );
+		$operations = Mockery::mock( Operations::class );
+		$operations->shouldReceive( 'installed' )->andReturn( array() );
+		$updates->shouldReceive( 'operations' )->andReturn( $operations );
 		$updates->shouldReceive( 'pending' )->andReturn(
 			array(
 				array(
@@ -344,6 +350,7 @@ final class ServicesTest extends PluginTestCase {
 	}
 
 	public function test_config_has_what_the_browser_needs_and_no_package_urls(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
 		$config = $this->page()->config();
 
 		$this->assertSame( 'update-rehearsal/v1', $config['rest'] );
@@ -365,9 +372,10 @@ final class ServicesTest extends PluginTestCase {
 	}
 
 	public function test_assets_pass_the_config_before_the_script(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'wp_enqueue_style' )->justReturn( true );
 		Functions\when( 'plugins_url' )->justReturn( 'https://example.test/wp-content/plugins/update-rehearsal/assets/axle-ui.css' );
-		Functions\expect( 'wp_enqueue_script' )->once()->with( 'update-rehearsal', Mockery::type( 'string' ), array( 'update-rehearsal-core', 'wp-api-fetch', 'wp-hooks', 'wp-i18n' ), '1.0.0', true );
+		Functions\expect( 'wp_enqueue_script' )->once()->with( 'update-rehearsal', Mockery::type( 'string' ), array( 'update-rehearsal-core', 'wp-api-fetch', 'wp-a11y', 'wp-hooks', 'wp-i18n' ), '1.0.0', true );
 		Functions\when( 'wp_register_script' )->justReturn( true );
 		Functions\when( 'wp_set_script_translations' )->justReturn( true );
 		Functions\expect( 'wp_add_inline_script' )->once()->with( 'update-rehearsal', Mockery::pattern( '/^window\.updateRehearsalConfig = \{/' ), 'before' );
@@ -448,7 +456,7 @@ final class ServicesTest extends PluginTestCase {
 		$this->assertStringContainsString( 'data-state="over"', $over );
 		$this->assertStringContainsString( 'About 120 MB to send once zipped: the database is 9 MB and the code 400 MB on disk. The limit is 100 MB.', $over );
 		$this->assertStringContainsString( 'Most of it is plugin and theme code.', $over );
-		$this->assertStringContainsString( 'Code measured 2 hours ago.', $over );
+		$this->assertStringContainsString( '2 hours ago</time>.', $over );
 		$this->assertStringContainsString( 'urh-remeasure', $over );
 	}
 

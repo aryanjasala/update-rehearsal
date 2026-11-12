@@ -84,6 +84,13 @@ class Estimate {
 			}
 		);
 
+		$skippable = array();
+		foreach ( $full as $table ) {
+			if ( ! $table['core'] && count( $skippable ) < 8 ) {
+				$skippable[] = $table + array( 'note' => Limits::table_note( $table['name'] ) );
+			}
+		}
+
 		$code     = $measure ? $this->code->measure( $fresh ) : $this->code->cached();
 		$pending  = null === $code;
 		$code     = $code ?? array(
@@ -109,6 +116,7 @@ class Estimate {
 			'threshold'       => Limits::table_size_threshold(),
 			'tables'          => $tables,
 			'biggest'         => array_slice( $full, 0, 5 ),
+			'skippable'       => $skippable,
 			'excluded'        => array_values(
 				array_filter(
 					$tables,

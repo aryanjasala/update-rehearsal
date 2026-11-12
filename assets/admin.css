@@ -145,11 +145,6 @@
 
 /* The report. */
 
-.urh-table-scroll {
-	max-width: 1100px;
-	overflow-x: auto;
-}
-
 .urh-broke {
 	color: var(--axle-error-text);
 }
@@ -319,4 +314,95 @@
 
 .urh-compare-frames iframe {
 	background: var(--axle-surface);
+}
+
+/* What to rehearse: the kinds, and the panes of each. */
+
+.urh-kinds {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 24px;
+	margin: 0 0 16px;
+	padding: 0;
+	border: 0;
+}
+
+.urh-pane[hidden] {
+	display: none;
+}
+
+.urh-remove-mode {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.urh-found,
+.urh-chosen,
+.urh-plain,
+.urh-skip ul,
+.urh-chosen-skipped ul {
+	margin: 8px 0;
+	padding: 0;
+	list-style: none;
+}
+
+.urh-found li,
+.urh-chosen li {
+	padding: 8px 0;
+	border-bottom: 1px solid var(--axle-border);
+}
+
+.urh-chosen-title {
+	margin: 16px 0 0;
+}
+
+.urh-skip {
+	margin: 16px 0;
+}
+
+.urh-skip fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.urh-skip li,
+.urh-chosen-skipped li {
+	padding: 4px 0;
+}
+
+.urh-installed tbody tr[hidden] {
+	display: none;
+}
+
+.urh-search-spinner {
+	float: none;
+	margin: 0;
+}
+
+.urh-copy-note {
+	margin: 0 0 16px;
+}
+
+.urh-run-again {
+	white-space: nowrap;
+}
+
+.urh-recent .axle-scroll {
+	max-width: 100%;
+}
+
+/* A file input and a long search box stay inside a narrow screen. */
+
+.urh-pane input[type="file"],
+.urh-pane input[type="search"] {
+	max-width: 100%;
+}
+
+.urh-pane .axle-toolbar__end {
+	max-width: 100%;
 }

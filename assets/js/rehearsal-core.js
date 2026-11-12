@@ -485,6 +485,7 @@
 			path: url.path,
 			label: url.label,
 			admin: !! url.admin,
+			as: url.as || '',
 			compare: url.compare !== false,
 			verdict,
 			errors: fresh.length,
@@ -652,6 +653,199 @@
 	}
 
 	/**
+	 * Text of a piece of HTML, with tags and entities gone.
+	 *
+	 * @param {string} html HTML.
+	 * @return {string} Text on one line.
+	 */
+	function plainText( html ) {
+		let text = String( html || '' ).replace( /<span\b[^>]*screen-reader-text[^>]*>[\s\S]*?<\/span>/gi, ' ' ).replace( /<[^>]*>/g, ' ' );
+		Object.keys( ENTITIES ).forEach( ( entity ) => {
+			text = text.split( entity ).join( ENTITIES[ entity ] );
+		} );
+		return text.replace( /\s+/g, ' ' ).trim();
+	}
+
+	/**
+	 * The screens in a wp-admin menu, read from the HTML of any admin page.
+	 *
+	 * @param {string} html Admin page HTML.
+	 * @return {{key: string, label: string}[]} One entry per link: the page it opens, and its name.
+	 */
+	function adminMenu( html ) {
+		const source = String( html || '' );
+		const start = source.indexOf( 'id="adminmenu"' );
+		if ( start === -1 ) {
+			return [];
+		}
+		const stop = source.indexOf( 'id="collapse-menu"', start );
+		const block = source.slice( start, stop === -1 ? undefined : stop );
+		const seen = new Set();
+		const items = [];
+		block.replace( /<a\b[^>]*\bhref=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, ( match, href, inner ) => {
+			const key = href.replace( /&#038;|&amp;/g, '&' ).replace( /^https?:\/\/[^/]+/i, '' ).replace( /^.*?\/wp-admin\//, '' );
+			const label = plainText( inner.replace( /<span\b[^>]*(?:update-plugins|awaiting-mod|update-count|plugin-count)[^>]*>[\s\S]*?<\/span>(?:\s*<\/span>)?/gi, ' ' ) );
+			if ( key && key !== '#' && label && ! seen.has( key ) ) {
+				seen.add( key );
+				items.push( { key, label } );
+			}
+			return match;
+		} );
+		return items;
+	}
+
+	/**
+	 * Scripts and stylesheets a page loads, without their version numbers.
+	 *
+	 * @param {string} html Page HTML.
+	 * @return {{url: string, type: string}[]} Files, once each.
+	 */
+	function assetsOf( html ) {
+		const source = String( html || '' );
+		const seen = new Set();
+		const files = [];
+		const add = ( url, type ) => {
+			const clean = String( url ).replace( /&#038;|&amp;/g, '&' ).replace( /#.*$/, '' ).replace( /([?&])(?:ver|v)=[^&]*&?/, '$1' ).replace( /[?&]$/, '' );
+			if ( clean && ! seen.has( clean ) ) {
+				seen.add( clean );
+				files.push( { url: clean, type } );
+			}
+		};
+		source.replace( /<script\b[^>]*\bsrc=["']([^"']+)["']/gi, ( match, url ) => {
+			add( url, 'script' );
+			return match;
+		} );
+		source.replace( /<link\b[^>]*>/gi, ( tag ) => {
+			if ( /\brel=["'][^"']*stylesheet/i.test( tag ) ) {
+				const href = ( tag.match( /\bhref=["']([^"']+)["']/i ) || [] )[ 1 ];
+				if ( href ) {
+					add( href, 'style' );
+				}
+			}
+			return tag;
+		} );
+		return files;
+	}
+
+	/**
+	 * Files a page loads after a change that it did not load before.
+	 *
+	 * @param {string} beforeHtml Page before.
+	 * @param {string} afterHtml  Page after.
+	 * @return {{url: string, type: string}[]} New files.
+	 */
+	function assetsAdded( beforeHtml, afterHtml ) {
+		const before = new Set( assetsOf( beforeHtml ).map( ( file ) => file.url ) );
+		return assetsOf( afterHtml ).filter( ( file ) => ! before.has( file.url ) );
+	}
+
+	/**
+	 * What adding a plugin added in the copy.
+	 *
+	 * @param {Object}   before   Reading before: tables, options, autoload_bytes, cron.
+	 * @param {Object}   after    Reading after.
+	 * @param {string[]} menuNew  Admin screens the plugin added.
+	 * @param {Object[]} assets   Front-end files: url, type, bytes, pages.
+	 * @return {Object} The "added" part of a report.
+	 */
+	function addedReport( before, after, menuNew, assets ) {
+		const had = ( list ) => new Set( list || [] );
+		const tables = had( before.tables );
+		const cron = had( before.cron );
+		return {
+			tables: ( after.tables || [] ).filter( ( name ) => ! tables.has( name ) ),
+			options: Math.max( 0, ( after.options || 0 ) - ( before.options || 0 ) ),
+			autoload_bytes: Math.max( 0, ( after.autoload_bytes || 0 ) - ( before.autoload_bytes || 0 ) ),
+			cron: ( after.cron || [] ).filter( ( hook ) => ! cron.has( hook ) ),
+			menu: menuNew || [],
+			assets: assets || [],
+		};
+	}
+
+	/**
+	 * What removing a plugin left behind in the copy.
+	 *
+	 * @param {Object}   after     Reading after, with orphans: shortcodes and blocks left in page content.
+	 * @param {string[]} menuGone  Admin screens that went missing.
+	 * @return {Object} The "removed" part of a report.
+	 */
+	function removedReport( after, menuGone ) {
+		const orphans = ( after && after.orphans ) || {};
+		const list = ( items ) => ( items || [] ).map( ( item ) => ( { name: item.name, pages: item.paths || item.pages || [] } ) );
+		return { shortcodes: list( orphans.shortcodes ), blocks: list( orphans.blocks ), menu: menuGone || [] };
+	}
+
+	/**
+	 * Reasons an add or a remove is not green: shortcodes and blocks left without
+	 * their plugin on the pages checked, and admin screens that went missing.
+	 *
+	 * @param {Object} removed From removedReport().
+	 * @return {Object[]} Reasons: code, name, paths.
+	 */
+	function removalReasons( removed ) {
+		const out = [];
+		( ( removed && removed.shortcodes ) || [] ).forEach( ( item ) => out.push( { code: 'orphan_shortcode', name: item.name, paths: item.pages } ) );
+		( ( removed && removed.blocks ) || [] ).forEach( ( item ) => out.push( { code: 'orphan_block', name: item.name, paths: item.pages } ) );
+		( ( removed && removed.menu ) || [] ).forEach( ( name ) => out.push( { code: 'missing_screen', name, paths: [] } ) );
+		return out;
+	}
+
+	/**
+	 * The verdict once reasons from an add or a remove are counted: they make a
+	 * green rehearsal amber, and never lower a worse one.
+	 *
+	 * @param {string}   current green, amber or red.
+	 * @param {Object[]} reasons From removalReasons().
+	 * @return {string} Verdict.
+	 */
+	function withRemovalReasons( current, reasons ) {
+		return current === 'green' && ( reasons || [] ).length ? 'amber' : current;
+	}
+
+	/**
+	 * The size of a file the copy served, from the response.
+	 *
+	 * @param {Object} response Response: bytes (Uint8Array) or text.
+	 * @return {number} Bytes.
+	 */
+	function responseBytes( response ) {
+		if ( response && response.bytes && typeof response.bytes.length === 'number' ) {
+			return response.bytes.length;
+		}
+		return response && typeof response.text === 'string' ? response.text.length : 0;
+	}
+
+	/**
+	 * Which login a page needs: a role, or none for a visitor.
+	 *
+	 * @param {Object} url Page entry: as (role) and admin.
+	 * @return {string} Role, or an empty string for a visitor.
+	 */
+	function loginOf( url ) {
+		if ( url && typeof url.as === 'string' ) {
+			return url.as === 'visitor' ? '' : url.as;
+		}
+		return url && url.admin ? 'administrator' : '';
+	}
+
+	/**
+	 * Orders pages so each login happens once: visitors, then administrators, then other roles.
+	 *
+	 * @param {Object[]} urls Pages.
+	 * @return {Object[]} Sorted copy.
+	 */
+	function groupByLogin( urls ) {
+		const rank = ( url ) => {
+			const login = loginOf( url );
+			return login === '' ? 0 : login === 'administrator' ? 1 : 2;
+		};
+		return ( urls || [] )
+			.map( ( url, index ) => ( { url, index } ) )
+			.sort( ( a, b ) => rank( a.url ) - rank( b.url ) || loginOf( a.url ).localeCompare( loginOf( b.url ) ) || a.index - b.index )
+			.map( ( item ) => item.url );
+	}
+
+	/**
 	 * Bytes in words.
 	 *
 	 * @param {number} bytes Bytes.
@@ -693,5 +887,16 @@
 		shortList,
 		previewHtml,
 		formatBytes,
+		plainText,
+		adminMenu,
+		assetsOf,
+		assetsAdded,
+		addedReport,
+		removedReport,
+		removalReasons,
+		withRemovalReasons,
+		responseBytes,
+		loginOf,
+		groupByLogin,
 	};
 } );

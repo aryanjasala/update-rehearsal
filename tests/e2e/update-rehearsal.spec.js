@@ -109,7 +109,7 @@ test.describe( 'Update Rehearsal', () => {
 		wpEval( "global $wpdb; $wpdb->query( \"CREATE TABLE IF NOT EXISTS {$wpdb->prefix}urh_e2e_sessions ( id int )\" );" );
 		await page.goto( PAGE + '&tab=settings' );
 		await page.locator( 'input[name=scrub_users]' ).uncheck();
-		await page.locator( 'input[value="wp_urh_e2e_sessions"]' ).check();
+		await page.locator( 'input[name="include_tables[]"][value="wp_urh_e2e_sessions"]' ).check();
 		await page.locator( '#urh-extra-urls' ).fill( '/shop/\njavascript:alert(1)\n/wp-admin/edit.php' );
 		await page.locator( '#urh-retention' ).fill( '30' );
 		await page.locator( '#submit' ).click();
@@ -229,7 +229,7 @@ test.describe( 'Update Rehearsal', () => {
 		expect( updates().find( ( item ) => item.key === KEY ) ).toMatchObject( { verdict: 'green', rehearsal: saved.body.id } );
 
 		await page.goto( '/wp-admin/plugins.php' );
-		await expect( page.locator( `tr.plugin-update-tr[data-plugin="${ FIXTURE }"] .urh-note` ) ).toHaveText( /Rehearsed .+ ago: green\./ );
+		await expect( page.locator( `tr.plugin-update-tr[data-plugin="${ FIXTURE }"] .urh-note` ) ).toHaveText( /Rehearsed (just now|.+ ago): green\./ );
 
 		await page.goto( PAGE + '&tab=history' );
 		await page.locator( '.urh-history a.row-title', { hasText: 'Recipe Cards 1.0 to 1.1' } ).click();
@@ -393,7 +393,9 @@ test.describe( 'Update Rehearsal', () => {
 
 			// The site's own format and zone, worked out by WordPress itself.
 			const expected = wpEval( `echo wp_date( 'j F Y H:i', get_post_time( 'U', true, ${ saved.body.id } ) );` );
-			await expect( page.locator( '.urh-meta time' ) ).toHaveText( expected );
+			// Relative in the text, the exact time in the title.
+			await expect( page.locator( '.urh-meta time' ) ).toHaveText( /just now|ago/ );
+			await expect( page.locator( '.urh-meta time' ) ).toHaveAttribute( 'title', expected );
 			expect( show( saved.body.id ).date ).toMatch( /\+00:00$/ );
 			expect( rehearsals()[ 0 ] ).toBeTruthy();
 			expect( JSON.parse( wp( 'update-rehearsal', 'list', '--format=json', '--fields=date' ) )[ 0 ].date ).toMatch( /\+00:00$/ );

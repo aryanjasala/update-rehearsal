@@ -14,6 +14,7 @@ use AryanX\Axle\UpdateRehearsal\Bundle\Files;
 use AryanX\Axle\UpdateRehearsal\Rehearsals;
 use AryanX\Axle\UpdateRehearsal\Service;
 use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Updates;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -48,16 +49,34 @@ final class Controller implements Service {
 	private Rehearsals $rehearsals;
 
 	/**
+	 * Saved settings.
+	 *
+	 * @var Settings
+	 */
+	private Settings $settings;
+
+	/**
+	 * Pending updates, adds and removals.
+	 *
+	 * @var Updates
+	 */
+	private Updates $updates;
+
+	/**
 	 * Sets up the routes.
 	 *
 	 * @param Builder    $builder    Bundle builder.
 	 * @param Estimate   $estimate   Size estimate.
 	 * @param Rehearsals $rehearsals Stored reports.
+	 * @param Settings   $settings   Saved settings.
+	 * @param Updates    $updates    Pending updates, adds and removals.
 	 */
-	public function __construct( Builder $builder, Estimate $estimate, Rehearsals $rehearsals ) {
+	public function __construct( Builder $builder, Estimate $estimate, Rehearsals $rehearsals, Settings $settings, Updates $updates ) {
 		$this->builder    = $builder;
 		$this->estimate   = $estimate;
 		$this->rehearsals = $rehearsals;
+		$this->settings   = $settings;
+		$this->updates    = $updates;
 	}
 
 	/**
@@ -85,6 +104,43 @@ final class Controller implements Service {
 					'fresh' => array(
 						'type'    => 'boolean',
 						'default' => false,
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/plugins/search',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'search_plugins' ),
+				'permission_callback' => array( $this, 'can_install' ),
+				'args'                => array(
+					'q' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/skip-tables',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'skip_tables' ),
+				'permission_callback' => $can,
+				'args'                => array(
+					'add'    => array(
+						'type'    => 'array',
+						'items'   => array( 'type' => 'string' ),
+						'default' => array(),
+					),
+					'remove' => array(
+						'type'    => 'array',
+						'items'   => array( 'type' => 'string' ),
+						'default' => array(),
 					),
 				),
 			)
@@ -160,6 +216,10 @@ final class Controller implements Service {
 							'default' => 1,
 						),
 						'verdict'  => array(
+							'type'    => 'string',
+							'default' => '',
+						),
+						'kind'     => array(
 							'type'    => 'string',
 							'default' => '',
 						),
@@ -291,6 +351,7 @@ final class Controller implements Service {
 				'per_page' => (int) $request->get_param( 'per_page' ),
 				'page'     => (int) $request->get_param( 'page' ),
 				'verdict'  => (string) $request->get_param( 'verdict' ),
+				'kind'     => (string) $request->get_param( 'kind' ),
 			)
 		);
 		$response = rest_ensure_response( $found['items'] );
@@ -310,9 +371,69 @@ final class Controller implements Service {
 		if ( is_wp_error( $saved ) ) {
 			return $saved;
 		}
+		$saved        = $this->rehearsals->for_screen( $saved );
 		$saved['url'] = admin_url( 'tools.php?page=update-rehearsal&rehearsal=' . $saved['id'] );
 
 		return rest_ensure_response( $saved );
+	}
+
+	/**
+	 * Who may search WordPress.org for a plugin to rehearse adding: whoever may install plugins.
+	 *
+	 * @return bool
+	 */
+	public function can_install(): bool {
+		return $this->can() && current_user_can( 'install_plugins' );
+	}
+
+	/**
+	 * Searches WordPress.org for a plugin to add.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function search_plugins( $request ) {
+		$found = $this->updates->operations()->search( (string) $request->get_param( 'q' ) );
+
+		return is_wp_error( $found ) ? $found : rest_ensure_response( $found );
+	}
+
+	/**
+	 * Leaves tables out of the copy, or puts them back, and measures again.
+	 *
+	 * Only tables that are not WordPress core tables, and that exist, count.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function skip_tables( $request ) {
+		$known = array();
+		foreach ( $this->estimate->get( false )['tables'] as $table ) {
+			if ( ! $table['core'] ) {
+				$known[] = $table['name'];
+			}
+		}
+		$before = (array) $this->settings->get( 'skip_tables' );
+		$add    = array_intersect( Settings::table_names( (array) $request->get_param( 'add' ) ), $known );
+		$remove = Settings::table_names( (array) $request->get_param( 'remove' ) );
+		$now    = array_values( array_diff( array_unique( array_merge( $before, $add ) ), $remove ) );
+
+		if ( $now !== $before ) {
+			$this->settings->save( array( 'skip_tables' => $now ) );
+
+			/**
+			 * Fires after someone changes which tables are left out of the copy on the Rehearse tab.
+			 *
+			 * @param string[] $now    Tables left out by choice.
+			 * @param string[] $before The same, before the change.
+			 */
+			do_action( 'update_rehearsal_tables_skipped', $now, $before );
+		}
+
+		$estimate         = $this->estimate->get( true );
+		$estimate['html'] = Page::estimate_html( $estimate );
+
+		return rest_ensure_response( $estimate );
 	}
 
 	/**

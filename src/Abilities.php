@@ -36,14 +36,23 @@ final class Abilities implements Service {
 	private Estimate $estimate;
 
 	/**
+	 * Pending updates, adds and removals.
+	 *
+	 * @var Updates
+	 */
+	private Updates $updates;
+
+	/**
 	 * Sets up the abilities.
 	 *
 	 * @param Rehearsals $rehearsals Stored reports.
 	 * @param Estimate   $estimate   Size estimate.
+	 * @param Updates    $updates    Pending updates, adds and removals.
 	 */
-	public function __construct( Rehearsals $rehearsals, Estimate $estimate ) {
+	public function __construct( Rehearsals $rehearsals, Estimate $estimate, Updates $updates ) {
 		$this->rehearsals = $rehearsals;
 		$this->estimate   = $estimate;
+		$this->updates    = $updates;
 	}
 
 	/**
@@ -102,6 +111,10 @@ final class Abilities implements Service {
 					'enum' => array( 'green', 'amber', 'red', 'failed' ),
 				),
 				'status'   => array( 'type' => 'string' ),
+				'kind'     => array(
+					'type' => 'string',
+					'enum' => array( 'update', 'add', 'remove' ),
+				),
 				'items'    => array( 'type' => 'array' ),
 				'php'      => array( 'type' => 'object' ),
 				'reasons'  => array(
@@ -117,13 +130,18 @@ final class Abilities implements Service {
 		$this->ability(
 			'list-rehearsals',
 			__( 'List update rehearsals', 'update-rehearsal' ),
-			__( 'Past rehearsals, newest first: which plugin, theme, core or PHP update was tried on a disposable copy of the site, and the verdict (green: safe, amber: warnings or visible changes, red: something broke). Running a new rehearsal needs a browser, so an agent cannot start one.', 'update-rehearsal' ),
+			__( 'Past rehearsals, newest first: which plugin, theme, core or PHP update was tried on a disposable copy of the site, or which plugin was added or removed on it, and the verdict (green: safe, amber: warnings or visible changes, red: something broke). Running a new rehearsal needs a browser, so an agent cannot start one.', 'update-rehearsal' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
 					'verdict' => array(
 						'type' => 'string',
 						'enum' => array( '', 'green', 'amber', 'red', 'failed' ),
+					),
+					'kind'    => array(
+						'type'        => 'string',
+						'enum'        => array( '', 'update', 'add', 'remove' ),
+						'description' => 'update, add (a plugin tried on the copy first) or remove (a plugin deactivated or deleted on the copy).',
 					),
 					'limit'   => array(
 						'type'    => 'integer',
@@ -173,6 +191,40 @@ final class Abilities implements Service {
 				),
 			),
 			array( $this, 'get_rehearsal' ),
+			$can
+		);
+
+		$this->ability(
+			'plan-rehearsal',
+			__( 'Plan an update rehearsal', 'update-rehearsal' ),
+			__( 'Checks what a rehearsal would run, without running it: pending updates, a plugin to add from WordPress.org (key install:<slug>), or a plugin to deactivate (deactivate:<plugin file>) or deactivate and delete (delete:<plugin file>). Says which items exist and whether this user may do each one, whether the site fits the size limit, and the WP-CLI command that builds the bundle for a CI run. Running the rehearsal needs a browser or @wp-playground/cli.', 'update-rehearsal' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'items' => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Keys: plugin:<file>, theme:<stylesheet>, core, install:<slug>, deactivate:<file> or delete:<file>. Leave empty for every pending update.',
+					),
+				),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'kind'       => array( 'type' => 'string' ),
+					'items'      => array( 'type' => 'array' ),
+					'problems'   => array(
+						'type'  => 'array',
+						'items' => array( 'type' => 'string' ),
+					),
+					'over_limit' => array( 'type' => 'boolean' ),
+					'message'    => array( 'type' => 'string' ),
+					'command'    => array( 'type' => 'string' ),
+				),
+			),
+			array( $this, 'plan_rehearsal' ),
 			$can
 		);
 
@@ -228,6 +280,7 @@ final class Abilities implements Service {
 		return $this->rehearsals->list(
 			array(
 				'verdict'  => (string) ( $input['verdict'] ?? '' ),
+				'kind'     => (string) ( $input['kind'] ?? '' ),
 				'per_page' => max( 1, min( 100, (int) ( $input['limit'] ?? 20 ) ) ),
 				'page'     => max( 1, (int) ( $input['page'] ?? 1 ) ),
 			)
@@ -247,6 +300,67 @@ final class Abilities implements Service {
 		}
 
 		return Rehearsals::summary( $item ) + array( 'report' => $item['report'] );
+	}
+
+	/**
+	 * Ability: plan-rehearsal.
+	 *
+	 * @param mixed $input items.
+	 * @return array
+	 */
+	public function plan_rehearsal( $input = null ): array {
+		$keys = array_values( array_filter( array_map( 'strval', (array) ( ( (array) $input )['items'] ?? array() ) ) ) );
+		if ( ! $keys ) {
+			$keys = array_column( $this->updates->pending(), 'key' );
+		}
+
+		$items    = array();
+		$problems = array();
+		foreach ( $keys as $key ) {
+			$item = Operations::is_operation_key( $key ) && 0 === strpos( $key, 'upload:' )
+				? new \WP_Error( 'update_rehearsal_upload_in_browser', __( 'A zip file stays in the browser, so it cannot be planned here.', 'update-rehearsal' ) )
+				: $this->updates->resolve( $key );
+			if ( is_wp_error( $item ) ) {
+				$problems[] = $key . ': ' . $item->get_error_message();
+				continue;
+			}
+			$allowed = Operations::can( $item, get_current_user_id() );
+			if ( ! $allowed ) {
+				/* translators: %s: item key. */
+				$problems[] = sprintf( __( '%s: you may not do this on the site, so you may not rehearse it.', 'update-rehearsal' ), $key );
+			}
+			unset( $item['package'] );
+			$items[] = $item + array( 'allowed' => $allowed );
+		}
+
+		$kind     = Operations::kind( $items );
+		$estimate = $this->estimate->get();
+		$by_type  = array();
+		foreach ( $items as $item ) {
+			$by_type[ $item['type'] ][] = 'update' === Operations::kind_of_type( $item['type'] ) ? $item['key'] : $item['id'];
+		}
+		$flags = array();
+		foreach ( array(
+			'install'    => '--add=',
+			'deactivate' => '--remove=',
+			'delete'     => '--delete=',
+		) as $type => $flag ) {
+			if ( ! empty( $by_type[ $type ] ) ) {
+				$flags[] = $flag . implode( ',', $by_type[ $type ] );
+			}
+		}
+		if ( 'update' === $kind ) {
+			$flags[] = '--updates=' . implode( ',', array_column( $items, 'key' ) );
+		}
+
+		return array(
+			'kind'       => $kind,
+			'items'      => $items,
+			'problems'   => $problems,
+			'over_limit' => (bool) $estimate['over_limit'],
+			'message'    => (string) $estimate['message'],
+			'command'    => 'wp update-rehearsal bundle --output=bundle.zip ' . implode( ' ', $flags ),
+		);
 	}
 
 	/**

@@ -28,6 +28,7 @@ function update_rehearsal_uninstall_site(): void {
 
 	delete_option( 'update_rehearsal_settings' );
 	delete_option( 'update_rehearsal_latest' );
+	delete_metadata( 'user', 0, 'update_rehearsal_steps_dismissed', '', true );
 	wp_unschedule_hook( 'update_rehearsal_cleanup' );
 }
 

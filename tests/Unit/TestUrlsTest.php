@@ -58,6 +58,7 @@ final class TestUrlsTest extends PluginTestCase {
 				'path'    => '/wp-admin/',
 				'label'   => 'Dashboard',
 				'admin'   => true,
+				'as'      => 'administrator',
 				'compare' => false,
 			),
 			$urls[6]
@@ -98,6 +99,7 @@ final class TestUrlsTest extends PluginTestCase {
 				'path'    => '/wp-admin/admin.php?page=shop',
 				'label'   => 'Shop settings',
 				'admin'   => true,
+				'as'      => 'administrator',
 				'compare' => true,
 			),
 			$last[1]

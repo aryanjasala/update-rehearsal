@@ -151,11 +151,22 @@ final class Command {
 	 * default: all
 	 * ---
 	 *
+	 * [--add=<slugs>]
+	 * : Rehearse adding plugins from WordPress.org: slugs, comma-separated. Then no updates are included unless you ask with --updates.
+	 *
+	 * [--remove=<plugins>]
+	 * : Rehearse deactivating plugins: plugin files such as akismet/akismet.php, or folders such as akismet, comma-separated.
+	 *
+	 * [--delete=<plugins>]
+	 * : Rehearse deactivating and deleting plugins, written like --remove.
+	 *
 	 * [--php=<version>]
 	 * : PHP version the Blueprint asks for, such as 8.4. Default: the version this site runs.
 	 *
 	 * ## EXAMPLES
 	 *
+	 *     wp update-rehearsal bundle --add=hello-dolly --output=bundle.zip
+	 *     wp update-rehearsal bundle --delete=akismet/akismet.php --output=bundle.zip
 	 *     wp update-rehearsal bundle --output=bundle.zip
 	 *     unzip -q bundle.zip -d bundle
 	 *     npx @wp-playground/cli@latest server --mount=./bundle:/urh --blueprint=./bundle/blueprint.json
@@ -165,13 +176,26 @@ final class Command {
 	 */
 	public function bundle( array $args, array $assoc_args ): void {
 		$output  = (string) ( $assoc_args['output'] ?? 'update-rehearsal-bundle.zip' );
-		$updates = (string) ( $assoc_args['updates'] ?? 'all' );
+		$adds    = $this->list_option( $assoc_args, 'add' );
+		$removes = $this->list_option( $assoc_args, 'remove' );
+		$deletes = $this->list_option( $assoc_args, 'delete' );
+		$ops     = $adds || $removes || $deletes;
+		$updates = (string) ( $assoc_args['updates'] ?? ( $ops ? 'none' : 'all' ) );
 		if ( 'all' === $updates ) {
 			$keys = array_column( $this->updates->pending(), 'key' );
 		} elseif ( 'none' === $updates ) {
 			$keys = array();
 		} else {
 			$keys = array_filter( array_map( 'trim', explode( ',', $updates ) ) );
+		}
+		foreach ( $adds as $slug ) {
+			$keys[] = 'install:' . sanitize_key( $slug );
+		}
+		foreach ( $removes as $plugin ) {
+			$keys[] = 'deactivate:' . $this->plugin_file( $plugin );
+		}
+		foreach ( $deletes as $plugin ) {
+			$keys[] = 'delete:' . $this->plugin_file( $plugin );
 		}
 
 		$manifest = $this->builder->build(
@@ -191,7 +215,7 @@ final class Command {
 
 		$titles = array();
 		foreach ( (array) ( $manifest['updates'] ?? array() ) as $item ) {
-			$titles[] = $item['name'] . ' ' . $item['to'];
+			$titles[] = 'update' === \AryanX\Axle\UpdateRehearsal\Operations::kind_of_type( (string) $item['type'] ) ? $item['name'] . ' ' . $item['to'] : \AryanX\Axle\UpdateRehearsal\Report::item_title( $item );
 		}
 		\WP_CLI::success(
 			sprintf(
@@ -201,6 +225,67 @@ final class Command {
 				$titles ? implode( ', ', $titles ) : 'none'
 			)
 		);
+	}
+
+	/**
+	 * Searches WordPress.org for a plugin to rehearse adding.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <term>
+	 * : Name or slug.
+	 *
+	 * [--format=<format>]
+	 * : table, csv, json, yaml or ids.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp update-rehearsal search "hello dolly"
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Named arguments.
+	 */
+	public function search( array $args, array $assoc_args ): void {
+		$found = $this->updates->operations()->search( (string) ( $args[0] ?? '' ) );
+		if ( is_wp_error( $found ) ) {
+			\WP_CLI::error( $found->get_error_message() );
+		}
+		$format = (string) ( $assoc_args['format'] ?? 'table' );
+		if ( 'ids' === $format ) {
+			\WP_CLI::line( implode( ' ', array_column( $found, 'slug' ) ) );
+			return;
+		}
+		\WP_CLI\Utils\format_items( $format, $found, array( 'slug', 'name', 'version', 'installs', 'installed' ) );
+	}
+
+	/**
+	 * A comma-separated option as a list.
+	 *
+	 * @param array  $assoc_args Named arguments.
+	 * @param string $name       Option name.
+	 * @return string[]
+	 */
+	private function list_option( array $assoc_args, string $name ): array {
+		return array_values( array_filter( array_map( 'trim', explode( ',', (string) ( $assoc_args[ $name ] ?? '' ) ) ) ) );
+	}
+
+	/**
+	 * An installed plugin's file from a file or a folder name.
+	 *
+	 * @param string $plugin akismet/akismet.php or akismet.
+	 * @return string
+	 */
+	private function plugin_file( string $plugin ): string {
+		foreach ( $this->updates->operations()->installed() as $installed ) {
+			if ( $installed['file'] === $plugin || $installed['slug'] === $plugin ) {
+				return $installed['file'];
+			}
+		}
+
+		return $plugin;
 	}
 
 	/**
@@ -258,8 +343,11 @@ final class Command {
 	 * default: 1
 	 * ---
 	 *
+	 * [--kind=<kind>]
+	 * : update, add or remove.
+	 *
 	 * [--fields=<fields>]
-	 * : Comma-separated fields. Default id,date,title,verdict,user. Also: status, pages, problems, error.
+	 * : Comma-separated fields. Default id,date,title,verdict,user. Also: kind, status, pages, problems, error.
 	 *
 	 * [--format=<format>]
 	 * : table, csv, json, yaml, ids or count.
@@ -280,6 +368,7 @@ final class Command {
 		$found = $this->rehearsals->list(
 			array(
 				'verdict'  => (string) ( $assoc_args['verdict'] ?? '' ),
+				'kind'     => (string) ( $assoc_args['kind'] ?? '' ),
 				'per_page' => (int) ( $assoc_args['per-page'] ?? 20 ),
 				'page'     => (int) ( $assoc_args['page'] ?? 1 ),
 			)
@@ -380,6 +469,15 @@ final class Command {
 	 * [--include-tables=<tables>]
 	 * : Comma-separated tables to copy in full even when they are big or look like logs. Empty to clear.
 	 *
+	 * [--skip-tables=<tables>]
+	 * : Comma-separated tables to leave out of the copy by choice (copied without their rows). Empty to clear.
+	 *
+	 * [--role-checks=<on|off>]
+	 * : Also check the dashboard and posts list as an editor, and My account as a customer when WooCommerce is active.
+	 *
+	 * [--steps=<steps>]
+	 * : Steps to run in the copy, separated by semicolons: a path, a role and a path such as editor:/wp-admin/edit.php, or search:coffee. Empty to clear.
+	 *
 	 * [--extra-urls=<paths>]
 	 * : Comma-separated extra pages to check, such as /shop/,/contact/. Empty to clear.
 	 *
@@ -412,6 +510,15 @@ final class Command {
 		if ( isset( $assoc_args['include-tables'] ) ) {
 			$changes['include_tables'] = Settings::table_names( explode( ',', (string) $assoc_args['include-tables'] ) );
 		}
+		if ( isset( $assoc_args['skip-tables'] ) ) {
+			$changes['skip_tables'] = Settings::table_names( explode( ',', (string) $assoc_args['skip-tables'] ) );
+		}
+		if ( isset( $assoc_args['role-checks'] ) ) {
+			$changes['role_checks'] = in_array( strtolower( (string) $assoc_args['role-checks'] ), array( 'on', '1', 'yes', 'true' ), true );
+		}
+		if ( isset( $assoc_args['steps'] ) ) {
+			$changes['check_steps'] = Settings::steps( explode( ';', (string) $assoc_args['steps'] ) );
+		}
 		if ( isset( $assoc_args['extra-urls'] ) ) {
 			$changes['extra_urls'] = Settings::paths( explode( ',', (string) $assoc_args['extra-urls'] ) );
 		}
@@ -429,6 +536,9 @@ final class Command {
 			'scrub_users'      => $all['scrub_users'] ? 'on' : 'off',
 			'inactive_plugins' => $all['include_inactive'] ? 'on' : 'off',
 			'include_tables'   => implode( ',', $all['include_tables'] ),
+			'skip_tables'      => implode( ',', $all['skip_tables'] ),
+			'role_checks'      => $all['role_checks'] ? 'on' : 'off',
+			'steps'            => implode( ';', $all['check_steps'] ),
 			'extra_urls'       => implode( ',', $all['extra_urls'] ),
 			'retention_days'   => $all['retention_days'],
 		);

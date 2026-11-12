@@ -369,4 +369,93 @@ final class Limits {
 
 		return trailingslashit( '' !== $dir ? $dir : get_temp_dir() . 'update-rehearsal/' );
 	}
+
+	/**
+	 * How many WordPress.org results a search shows.
+	 *
+	 * @return int
+	 */
+	public static function search_results(): int {
+		/**
+		 * Filters how many plugins a WordPress.org search shows on the Add a plugin pane.
+		 *
+		 * @param int $count Default 8. Between 1 and 30.
+		 */
+		return max( 1, min( 30, (int) apply_filters( 'update_rehearsal_search_results', 8 ) ) );
+	}
+
+	/**
+	 * Largest zip file that can be chosen in the browser to rehearse adding it.
+	 *
+	 * @return int Bytes.
+	 */
+	public static function upload_max_bytes(): int {
+		/**
+		 * Filters the size limit of a plugin zip chosen in the browser. The file
+		 * stays in the browser and the copy, so it does not count against the bundle limit.
+		 *
+		 * @param int $bytes Default 25 MB. At least 1 MB.
+		 */
+		return max( self::MB, (int) apply_filters( 'update_rehearsal_upload_max_bytes', 25 * self::MB ) );
+	}
+
+	/**
+	 * How many front-end files a rehearsal of adding a plugin measures.
+	 *
+	 * @return int
+	 */
+	public static function asset_limit(): int {
+		/**
+		 * Filters how many new scripts and stylesheets a rehearsal of adding a
+		 * plugin requests to measure their size. The rest are listed without a size.
+		 *
+		 * @param int $limit Default 40. Between 1 and 200.
+		 */
+		return max( 1, min( 200, (int) apply_filters( 'update_rehearsal_asset_limit', 40 ) ) );
+	}
+
+	/**
+	 * How many past rehearsals the Rehearse tab lists.
+	 *
+	 * @return int
+	 */
+	public static function recent_limit(): int {
+		/**
+		 * Filters how many recent rehearsals the Rehearse tab lists, with a Run again link.
+		 *
+		 * @param int $limit Default 10. Between 1 and 50.
+		 */
+		return max( 1, min( 50, (int) apply_filters( 'update_rehearsal_recent_limit', 10 ) ) );
+	}
+
+	/**
+	 * What leaving a table out of the copy hides, by name.
+	 *
+	 * @param string $table Table name.
+	 * @return string One sentence.
+	 */
+	public static function table_note( string $table ): string {
+		$notes = array(
+			'/(?:^|_)(?:sessions?)$/i'          => __( 'Logged-in sessions and carts are empty in the copy.', 'update-rehearsal' ),
+			'/(?:^|_)(?:logs?|log_\w+)$/i'      => __( 'Log screens show nothing in the copy.', 'update-rehearsal' ),
+			'/(?:analytics|stats|statistics|visits|hits|events|tracking)/i' => __( 'Reports and counters that read it show zero in the copy.', 'update-rehearsal' ),
+			'/(?:actionscheduler|queue|jobs)/i' => __( 'Scheduled and queued jobs are missing in the copy.', 'update-rehearsal' ),
+		);
+
+		/**
+		 * Filters the notes that say what leaving a table out hides, as
+		 * pattern (a regular expression matched against the table name) => sentence.
+		 *
+		 * @param string[] $notes Default notes for sessions, logs, analytics and job queues.
+		 * @param string   $table The table.
+		 */
+		$notes = (array) apply_filters( 'update_rehearsal_table_notes', $notes, $table );
+		foreach ( $notes as $pattern => $note ) {
+			if ( is_string( $pattern ) && 1 === @preg_match( $pattern, $table ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A filtered pattern may be invalid.
+				return (string) $note;
+			}
+		}
+
+		return __( 'Pages that read this table show no data from it in the copy.', 'update-rehearsal' );
+	}
 }

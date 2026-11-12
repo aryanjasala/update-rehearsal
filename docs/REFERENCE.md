@@ -13,13 +13,37 @@
 | Check the pages after | Inside Playground | The same requests again |
 | Compare | Your browser | Status, response time, new PHP errors (by plugin or theme), and a diff of the visible text and elements after normalising nonces, versions and times. The report goes back to your site |
 
+### Three kinds of rehearsal
+
+| Kind | What the copy does | What the report adds |
+| --- | --- | --- |
+| Update | Unpacks the update packages over the old folders (and starts a second copy for a PHP or core change) | New errors by plugin or theme, each page before and after |
+| Add a plugin | Unpacks the plugin from WordPress.org, or from a zip file chosen in the browser, and turns it on. The request that turns it on runs inside the copy, so a plugin that breaks as it starts shows up in the log | What the plugin added: new tables, options and autoloaded bytes, scheduled tasks, admin menu items, and the new scripts and stylesheets on each page with their size |
+| Remove a plugin | Deactivates the plugin, or deactivates it and deletes it with its uninstall code | Shortcodes and blocks left without their plugin in the content of the pages checked, and admin screens that went missing |
+
+One kind at a time. A zip file chosen in the browser stays in the browser and the copy: it is never sent to your site, so it cannot be part of a bundle built on the server, and "Run again" asks for the file again. Every report says that it ran on a copy and nothing changed on the site. "Install for real", "Upload for real", "Deactivate for real" and "Delete for real" follow the same rules as "Update for real": under amber or red they ask first and name the problems. Deleting always asks, because it cannot be undone.
+
+Each item is checked for the person who starts the rehearsal: `install_plugins` to add, `deactivate_plugin` for that plugin to remove, and `delete_plugins` too for a delete, on top of the rehearsal capability. This plugin does not offer itself for removal, because a rehearsal runs on its own code.
+
+### Logged-in checks and steps
+
+Each page is checked as a visitor, or as a role. The copy makes a throwaway user for each role, in the copy only, and logs in with a one-time token before it requests the page. Turn on "Logged-in checks" on the Settings tab for the presets: the dashboard and the posts list as an editor, and My account as a customer when WooCommerce is active. Under "Steps to run in the copy" write your own, one per line, and only these three kinds:
+
+```
+/shop/                      open a page as a visitor
+editor: /wp-admin/edit.php  log in as a role, then open a page
+search: coffee              submit a search
+```
+
+The report lists each step with its status and new errors, like every other page. A role the site does not have is skipped.
+
 ### Verdicts
 
 | Verdict | When |
 | --- | --- |
 | green | No new PHP errors, every page answers with the same status, nothing visible changed |
-| amber | A new warning, notice, deprecation or database error, a changed status, or a visible change on a page that is compared |
-| red | A new fatal error, a page that answered under 500 before and 500 or more after, or a page that is blank after the update |
+| amber | A new warning, notice, deprecation or database error, a changed status, a visible change on a page that is compared, or a shortcode, block or admin screen left without its plugin after a removal |
+| red | A new fatal error, a page that answered under 500 before and 500 or more after, a page that is blank after the change, or a plugin that could not be switched on in the copy |
 | failed | The rehearsal could not finish: the bundle failed to build, a package could not be downloaded, or Playground did not start. The reason is stored |
 
 Errors are matched by level, source and message, without line numbers, so a warning that only moved is not new. Errors inside WordPress go to the first plugin or theme in the stack trace.
@@ -37,6 +61,8 @@ The limit counts what your browser downloads: the zipped parts, not the files on
 
 Over the limit, the message names what makes the copy big: the biggest plugin and theme folders when code is most of it, the biggest tables when the database is.
 
+Under the message the screen lists the biggest tables that are not WordPress tables, each with a sentence on what leaving it out hides: sessions and carts, log screens, reports and counters, queued jobs, or "pages that read this table show no data from it". Tick the ones you can do without and press "Leave out the ticked tables and measure again". The copy keeps the table but not its rows. Tables left out this way are listed under the size with a "Copy its rows again" button, and on the Settings tab. WordPress core tables always go in full. The notes come from `update_rehearsal_table_notes`.
+
 ## Hooks
 
 | Hook | Type | Use |
@@ -47,7 +73,7 @@ Over the limit, the message names what makes the copy big: the biggest plugin an
 | `update_rehearsal_table_size_threshold` | filter | `( int $bytes )`. Size above which a table that is not a core table goes in as structure only. Default 10 MB. 0 copies everything in full |
 | `update_rehearsal_include_inactive_plugins` | filter | `( bool $include )`. Copy inactive plugins. Default false, or the setting. Inactive plugins cannot change the pages checked |
 | `update_rehearsal_scrub_users` | filter | `( bool $scrub )`. Replace user emails and password hashes in the copy. Default true, or the setting |
-| `update_rehearsal_test_urls` | filter | `( array $urls )`. The pages requested before and after. Each entry: `path` (relative to the home page), `label`, `admin` (needs a login), `compare` (diff the HTML; off for admin screens). Plain strings work too |
+| `update_rehearsal_test_urls` | filter | `( array $urls )`. The pages requested before and after. Each entry: `path` (relative to the home page), `label`, `admin` (an admin screen), `as` (the role to log in as: empty for a visitor, `administrator` for admin screens), `compare` (diff the HTML; off for admin screens). Plain strings work too |
 | `update_rehearsal_normalise_html` | filter | `( string[] $patterns )`. JavaScript regular expression sources removed from each page before the comparison, with the `gi` flags |
 | `update_rehearsal_ignored_errors` | filter | `( string[] $patterns )`. Errors that never count: plain text found in the message or path, or `/regex/flags` |
 | `update_rehearsal_verdict` | filter | `( string $verdict, array $report )`. The verdict before the report is stored. Must return green, amber or red |
@@ -66,12 +92,23 @@ Over the limit, the message names what makes the copy big: the biggest plugin an
 | `update_rehearsal_work_dir` | filter | `( string $dir )`. Where bundles are built. Default `update-rehearsal/` in the system temp folder |
 | `update_rehearsal_retention_days` | filter | `( int $days )`. How long reports are kept. Default 90, or the setting |
 | `update_rehearsal_over_limit_message` | filter | `( string $message, array $estimate )`. What people read when the site is over the cap. `$estimate` has the sizes on disk and zipped, the biggest tables (`biggest`) and folders (`folders`) |
-| `update_rehearsal_rehearsal_started` | action | `( array $job )`. Someone pressed Start and the bundle started building. `$job`: `id`, `user`, `items`, `php` |
+| `update_rehearsal_can_rehearse_item` | filter | `( bool $allowed, array $item, int $user_id )`. Whether a person may rehearse one item. Default: they could do it for real (`install_plugins`, `deactivate_plugin` for that plugin, `delete_plugins`) |
+| `update_rehearsal_install_package` | filter | `( string $package, string $slug, object $api )`. Where the package of a plugin to add comes from. Default the WordPress.org download link. A path on the server works too |
+| `update_rehearsal_real_link` | filter | `( array $link, string $type, string $id )`. The `label` and `url` a report offers to install, upload, deactivate or delete for real |
+| `update_rehearsal_role_pages` | filter | `( array $entries )`. The pages checked as a role: the presets and the steps from the settings, before roles are checked against the site. Each entry is a page with `as` (the role) |
+| `update_rehearsal_table_notes` | filter | `( array $notes, string $table )`. What leaving a table out hides, as a regular expression matched against the table name => a sentence |
+| `update_rehearsal_search_results` | filter | `( int $count )`. How many WordPress.org results the Add a plugin pane shows. Default 8, between 1 and 30 |
+| `update_rehearsal_upload_max_bytes` | filter | `( int $bytes )`. The largest zip file that can be chosen in the browser. Default 25 MB, at least 1 MB |
+| `update_rehearsal_asset_limit` | filter | `( int $limit )`. How many new scripts and stylesheets are requested to measure their size. Default 40, between 1 and 200 |
+| `update_rehearsal_recent_limit` | filter | `( int $limit )`. How many recent rehearsals the Rehearse tab lists. Default 10, between 1 and 50 |
+| `update_rehearsal_rehearsal_started` | action | `( array $job )`. Someone pressed Start and the bundle started building. `$job`: `id`, `user`, `items` (updates, plugins to add, plugins to remove), `php` |
 | `update_rehearsal_bundle_built` | action | `( string $dir, array $manifest )`. A bundle is ready, in the browser flow and for WP-CLI |
 | `update_rehearsal_rehearsal_finished` | action | `( array $report, int $post_id )`. A rehearsal finished and its report was stored |
 | `update_rehearsal_rehearsal_failed` | action | `( WP_Error $error, array $context )`. A rehearsal could not finish. `$context`: `items`, `php`, `post_id` (0 when the bundle failed) |
 | `update_rehearsal_settings_saved` | action | `( array $settings, array $old )`. The settings changed |
 | `update_rehearsal_cleaned_up` | action | `( int $bundles, int $reports )`. The hourly clean-up removed old bundles and reports |
+| `update_rehearsal_tables_skipped` | action | `( string[] $now, string[] $before )`. Someone changed which tables are left out of the copy on the Rehearse tab |
+| `update_rehearsal_steps_dismissed` | action | `( int $user_id )`. Someone closed the "Get started" card |
 
 ```php
 // Shop managers may rehearse too.
@@ -112,9 +149,10 @@ The rehearsal screen runs `wp.hooks`, read when used, so scripts that load later
 | `updateRehearsal.testUrls` | filter | `( urls, context )`. The pages requested, after the PHP filter. Entries as above, or plain paths. `context`: `items`, `php`, `manifest` |
 | `updateRehearsal.normaliseHtml` | filter | `( html, context )`. Each page's HTML after the normalise patterns, before the diff. `context`: `path`, `phase` (before or after) |
 | `updateRehearsal.blueprintSteps` | filter | `( steps, context )`. [Blueprint steps](https://wordpress.github.io/wordpress-playground/blueprints/steps) run in the copy after it loads and before the first request. Default: `defineWpConfigConsts` with `WP_DEBUG_LOG` on and cron off. `context`: `phase`, `items`, `php`, `manifest` |
-| `updateRehearsal.stepFinished` | action | `( step, context )`. A step finished: `bundle`, `download`, `boot`, `load`, `before`, `apply`, `after`, `compare` |
+| `updateRehearsal.stepFinished` | action | `( step, context )`. A step finished: `bundle`, `download`, `boot`, `load`, `before`, `apply`, `after`, `compare`. `context.kind` is `update`, `add` or `remove` |
 | `updateRehearsal.finished` | action | `( report, context )`. The run ended, finished or failed. `report.verdict` is the stored verdict |
 | `updateRehearsal.confirmUpdate` | filter | `( ask, context )`. Whether "Update for real" asks first. `ask`: `required` (true under amber and red), `level`, `reasons` (up to five, in words), `more`. `context`: `item`, `stored`. Return `required: false` to skip the question |
+| `updateRehearsal.inspect` | filter | `( reading, context )`. What the copy holds before and after adding or removing a plugin: `tables`, `options`, `autoload_bytes`, `cron`, `shortcodes`, `blocks` and, after, `orphans`. `context`: `phase`, `kind`, `items` |
 | `updateRehearsal.estimated` | action | `( estimate )`. The size of the copy arrived on the Rehearse tab, after loading or "Measure again" |
 
 ```js
@@ -129,7 +167,7 @@ wp.hooks.addFilter( 'updateRehearsal.blueprintSteps', 'my-plugin', ( steps ) =>
 );
 ```
 
-`window.updateRehearsal` exposes `testUrls( context )`, `run( { items, php } )`, `renderReport( element, rehearsal, options )`, `selection()` and `loadEstimate( fresh )`.
+`window.updateRehearsal` exposes `testUrls( context )`, `run( { kind, items, php, chosen, uploads } )`, `search( term )`, `choose( plugin )`, `renderReport( element, rehearsal, options )`, `selection()` and `loadEstimate( fresh )`.
 
 ## Abilities
 
@@ -137,8 +175,9 @@ On WordPress 6.9 and later, Update Rehearsal registers [abilities](https://devel
 
 | Ability | Does |
 | --- | --- |
-| `update-rehearsal/list-rehearsals` | Past rehearsals, newest first, with the verdict and reasons. Input: `verdict`, `limit`, `page` |
+| `update-rehearsal/list-rehearsals` | Past rehearsals, newest first, with the kind, the verdict and reasons. Input: `verdict`, `kind` (`update`, `add` or `remove`), `limit`, `page` |
 | `update-rehearsal/get-rehearsal` | One rehearsal with its full report: pages, new errors by source, failed tables. Input: `id` |
+| `update-rehearsal/plan-rehearsal` | What a rehearsal would run, without running it. Input: `items`, keys such as `plugin:akismet/akismet.php`, `install:hello-dolly`, `deactivate:akismet/akismet.php` or `delete:akismet/akismet.php`; empty means every pending update. Says which exist, whether this person may do each one, whether the site fits the limit, and the `wp update-rehearsal bundle` command for a CI run |
 | `update-rehearsal/get-bundle-estimate` | How big a copy would be on disk and once zipped, the limit, the biggest tables and plugin or theme folders, and the tables copied as structure only |
 
 Running a rehearsal needs a browser, because the copy runs in WordPress Playground there, so no ability starts one. For a rehearsal without a browser, see CI below.
@@ -148,13 +187,14 @@ Running a rehearsal needs a browser, because the copy runs in WordPress Playgrou
 ```sh
 wp update-rehearsal estimate [--fresh] [--format=table|csv|json|yaml]
 wp update-rehearsal updates [--format=table|csv|json|yaml|count]
-wp update-rehearsal bundle [--output=<file>] [--updates=all|none|<keys>] [--php=<version>]
-wp update-rehearsal list [--verdict=<verdict>] [--per-page=<n>] [--page=<n>] [--fields=<fields>] [--format=table|csv|json|yaml|ids|count]
+wp update-rehearsal search <term> [--format=table|csv|json|yaml|ids]
+wp update-rehearsal bundle [--output=<file>] [--updates=all|none|<keys>] [--add=<slugs>] [--remove=<plugins>] [--delete=<plugins>] [--php=<version>]
+wp update-rehearsal list [--verdict=<verdict>] [--kind=<kind>] [--per-page=<n>] [--page=<n>] [--fields=<fields>] [--format=table|csv|json|yaml|ids|count]
 wp update-rehearsal show <id> [--format=table|json|yaml]
-wp update-rehearsal settings [--scrub-users=on|off] [--inactive-plugins=on|off] [--include-tables=<tables>] [--extra-urls=<paths>] [--retention-days=<n>] [--format=table|json|yaml]
+wp update-rehearsal settings [--scrub-users=on|off] [--inactive-plugins=on|off] [--include-tables=<tables>] [--skip-tables=<tables>] [--role-checks=on|off] [--steps=<steps>] [--extra-urls=<paths>] [--retention-days=<n>] [--format=table|json|yaml]
 ```
 
-Update keys look like `plugin:akismet/akismet.php`, `theme:twentytwentyfive` or `core`. `wp update-rehearsal updates` lists them.
+Update keys look like `plugin:akismet/akismet.php`, `theme:twentytwentyfive` or `core`. `wp update-rehearsal updates` lists them. `--add` takes WordPress.org slugs. `--remove` and `--delete` take plugin files such as `akismet/akismet.php`, or folders such as `akismet`. An add or a removal is its own rehearsal: with `--add`, `--remove` or `--delete` no updates are included unless you ask with `--updates`, and the kinds cannot be mixed. `--steps` takes steps separated by semicolons, such as `editor:/wp-admin/edit.php;search:coffee`.
 
 ## CI with @wp-playground/cli
 
@@ -166,7 +206,7 @@ unzip -q bundle.zip -d bundle
 npx @wp-playground/cli@latest server --mount=./bundle:/urh --blueprint=./bundle/blueprint.json
 ```
 
-`blueprint.json` loads the copy and applies the updates; `blueprint-before.json` loads it without them. Point your tests at both and compare. `--php` changes the PHP version the Blueprint asks for.
+`blueprint.json` loads the copy and applies the updates, or adds, deactivates or deletes the plugins you asked for; `blueprint-before.json` loads it without them. Point your tests at both and compare. `--php` changes the PHP version the Blueprint asks for.
 
 ## REST API
 
@@ -175,21 +215,23 @@ Everything under `update-rehearsal/v1` needs the rehearsal capability on the mai
 | Route | Does |
 | --- | --- |
 | `GET /estimate` | The size estimate |
-| `POST /bundles` | Starts a bundle. Body: `items` (update keys), `php`. 413 when the site is over the cap |
+| `GET /plugins/search?q=<words>` | Searches WordPress.org for a plugin to add. Needs `install_plugins` too |
+| `POST /skip-tables` | Leaves tables out of the copy, or copies them again, and returns the new size. Body: `add`, `remove` (table names). Only tables that exist and are not WordPress core tables count |
+| `POST /bundles` | Starts a bundle. Body: `items` (update keys, `install:<slug>`, `deactivate:<file>` or `delete:<file>`), `php`. 413 when the site is over the cap, 403 for an item the person may not do for real, 400 for mixed kinds |
 | `POST /bundles/<id>/step` | Runs the next build step and returns the progress |
 | `GET /bundles/<id>/file?name=<file>` | Streams one bundle file. Only the person who started the bundle can read it |
 | `DELETE /bundles/<id>` | Removes the bundle folder |
-| `GET /rehearsals`, `GET /rehearsals/<id>` | Stored reports |
+| `GET /rehearsals`, `GET /rehearsals/<id>` | Stored reports. The list takes `verdict` and `kind` |
 | `POST /rehearsals` | Stores a report. Body: `report`. The report is cleaned against a fixed shape first |
 
 ## The bundle
 
 | File | Contents |
 | --- | --- |
-| `manifest.json` | WordPress and PHP versions, the table prefix, the home and uploads URLs, plugins and themes with versions, which tables went in full, the updates and the pages to check |
+| `manifest.json` | WordPress and PHP versions, the table prefix, the home and uploads URLs, plugins and themes with versions, which tables went in full, the `kind` (`update`, `add` or `remove`), the items, the roles the copy needs users for, and the pages to check |
 | `part-NNN.zip` | `database/NNN.sql` (one statement per line, each table starting with `-- table: <name>`) and the code under `wp-content/` |
-| `updates/<type>-<slug>.zip` | The update packages |
-| `rehearsal/setup.php`, `rehearsal/apply.php`, `rehearsal/mu-plugin.php` | The PHP that runs inside Playground. It never runs on your site |
+| `updates/<type>-<slug>.zip` | The update packages, and the packages of plugins to add. A removal has none |
+| `rehearsal/setup.php`, `rehearsal/apply.php`, `rehearsal/operate.php`, `rehearsal/inspect.php`, `rehearsal/mu-plugin.php` | The PHP that runs inside Playground. `operate.php` turns plugins on and off and deletes them, `inspect.php` reads what the copy holds. None of it runs on your site |
 | `blueprint.json`, `blueprint-before.json` | For @wp-playground/cli |
 
 Bundles are built in `update-rehearsal/<random>/` in the system temp folder, with an `.htaccess` and `index.php` in case that folder is under the web root. The browser deletes the bundle after the download, and the hourly clean-up removes anything older than an hour.
@@ -198,16 +240,17 @@ Bundles are built in `update-rehearsal/<random>/` in the system temp folder, wit
 
 | Where | Contents |
 | --- | --- |
-| `upd_rehearsal` posts | One per rehearsal: the title, who ran it (`post_author`), and the report as JSON in `_update_rehearsal_report` with the verdict in `_update_rehearsal_verdict` |
-| `update_rehearsal_settings` | Scrub users, inactive plugins, tables to include, extra pages, retention |
+| `upd_rehearsal` posts | One per rehearsal: the title, who ran it (`post_author`), and the report as JSON in `_update_rehearsal_report` with the verdict in `_update_rehearsal_verdict` and the kind in `_update_rehearsal_kind` |
+| `update_rehearsal_settings` | Scrub users, inactive plugins, tables to include, tables left out, logged-in checks, steps, extra pages, retention |
+| User meta `update_rehearsal_steps_dismissed` | Whether this person closed the "Get started" card |
 | `update_rehearsal_latest` | The latest verdict for each update key and version, for the Plugins screen |
 | `update_rehearsal_cleanup` | Hourly WP-Cron job that removes old bundles and, in batches, reports past the retention period |
 
-Uninstalling deletes the reports, the options, the job and the work folder.
+Uninstalling deletes the reports, the options, the user meta, the job and the work folder.
 
 ## Privacy
 
-A report notes which administrator ran it. Reports take part in **Tools > Export Personal Data**, and **Tools > Erase Personal Data** removes the person from them and keeps the reports. **Settings > Privacy** gets suggested text that explains what the copy is and where it runs.
+A report notes which administrator ran it. The zip file of a plugin to add never leaves the browser, and the throwaway users in the copy have no real data. Reports take part in **Tools > Export Personal Data**, and **Tools > Erase Personal Data** removes the person from them and keeps the reports. **Settings > Privacy** gets suggested text that explains what the copy is and where it runs.
 
 ## Multisite
 

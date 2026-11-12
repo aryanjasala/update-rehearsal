@@ -97,6 +97,9 @@ abstract class PluginTestCase extends TestCase {
 			}
 		);
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wp_kses' )->returnArg();
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'user_can' )->justReturn( true );
 		Functions\when( 'wp_slash' )->returnArg();
 		Functions\when( 'wp_unslash' )->returnArg();
 		Functions\when( 'absint' )->alias(

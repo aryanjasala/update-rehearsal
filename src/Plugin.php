@@ -140,12 +140,12 @@ final class Plugin {
 			$this->rehearsals,
 			$this->code,
 			new Cleanup( $this->settings, $this->builder, $this->rehearsals ),
-			new Controller( $this->builder, $this->estimate, $this->rehearsals ),
+			new Controller( $this->builder, $this->estimate, $this->rehearsals, $this->settings, $this->updates ),
 			new Page( $this->settings, $this->updates, $this->estimate, $this->rehearsals, $this->urls ),
 			new PluginsScreen( $this->rehearsals ),
 			new SiteHealth( $this->estimate ),
 			new Privacy(),
-			new Abilities( $this->rehearsals, $this->estimate ),
+			new Abilities( $this->rehearsals, $this->estimate, $this->updates ),
 		);
 
 		foreach ( $services as $service ) {

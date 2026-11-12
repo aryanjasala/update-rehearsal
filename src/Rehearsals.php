@@ -18,6 +18,7 @@ class Rehearsals implements Service {
 	public const POST_TYPE     = 'upd_rehearsal';
 	public const META          = '_update_rehearsal_report';
 	public const VERDICT_META  = '_update_rehearsal_verdict';
+	public const KIND_META     = '_update_rehearsal_kind';
 	public const LATEST_OPTION = 'update_rehearsal_latest';
 
 	/**
@@ -71,6 +72,7 @@ class Rehearsals implements Service {
 
 		update_post_meta( $id, self::META, wp_slash( (string) wp_json_encode( $report ) ) );
 		update_post_meta( $id, self::VERDICT_META, '' !== $report['verdict'] ? $report['verdict'] : 'failed' );
+		update_post_meta( $id, self::KIND_META, $report['kind'] );
 
 		if ( 'finished' === $report['status'] ) {
 			$this->remember( $id, $report );
@@ -135,9 +137,23 @@ class Rehearsals implements Service {
 	}
 
 	/**
+	 * A stored rehearsal with what the screen needs: the time as relative
+	 * HTML, and the links that do an add or a remove for real.
+	 *
+	 * @param array $stored From get().
+	 * @return array
+	 */
+	public function for_screen( array $stored ): array {
+		$stored['when_html'] = Admin\AxleUi::relative_time( (int) strtotime( (string) $stored['date'] ) );
+		$stored['links']     = Operations::real_links( (array) ( $stored['report']['items'] ?? array() ) );
+
+		return $stored;
+	}
+
+	/**
 	 * Stored rehearsals, newest first, without their full reports.
 	 *
-	 * @param array $args per_page, page, verdict.
+	 * @param array $args per_page, page, verdict, kind (update, add or remove).
 	 * @return array{items: array[], total: int}
 	 */
 	public function list( array $args = array() ): array {
@@ -148,7 +164,6 @@ class Rehearsals implements Service {
 			'paged'          => max( 1, (int) ( $args['page'] ?? 1 ) ),
 			'orderby'        => 'date',
 			'order'          => 'DESC',
-			'fields'         => 'ids',
 		);
 		$verdict    = (string) ( $args['verdict'] ?? '' );
 		if ( in_array( $verdict, array( 'green', 'amber', 'red', 'failed' ), true ) ) {
@@ -156,10 +171,38 @@ class Rehearsals implements Service {
 			$query_args['meta_value'] = $verdict; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Few rows, the plugin's own post type.
 		}
 
+		$kind = (string) ( $args['kind'] ?? '' );
+		if ( in_array( $kind, Operations::KINDS, true ) ) {
+			// Rehearsals stored before kinds existed are updates.
+			$query_args['meta_query'] = 'update' === $kind // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Few rows, the plugin's own post type.
+				? array(
+					'relation' => 'OR',
+					array(
+						'key'   => self::KIND_META,
+						'value' => 'update',
+					),
+					array(
+						'key'     => self::KIND_META,
+						'compare' => 'NOT EXISTS',
+					),
+				)
+				: array(
+					array(
+						'key'   => self::KIND_META,
+						'value' => $kind,
+					),
+				);
+		}
+
+		// Whole posts, not IDs: WP_Query then reads every row's meta in one query, instead of one query per rehearsal.
 		$query = new \WP_Query( $query_args );
+		$posts = (array) $query->posts;
+		if ( function_exists( 'cache_users' ) ) {
+			cache_users( array_values( array_unique( array_map( static fn( $post ) => (int) ( is_object( $post ) ? $post->post_author : 0 ), $posts ) ) ) );
+		}
 		$items = array();
-		foreach ( $query->posts as $id ) {
-			$item = $this->get( (int) $id );
+		foreach ( $posts as $post ) {
+			$item = $this->get( is_object( $post ) ? (int) $post->ID : (int) $post );
 			if ( $item ) {
 				$items[] = self::summary( $item );
 			}
@@ -188,6 +231,7 @@ class Rehearsals implements Service {
 			'user'     => $item['user'],
 			'verdict'  => $item['verdict'],
 			'status'   => (string) ( $report['status'] ?? '' ),
+			'kind'     => (string) ( $report['kind'] ?? Operations::kind( (array) ( $report['items'] ?? array() ) ) ),
 			'items'    => (array) ( $report['items'] ?? array() ),
 			'php'      => (array) ( $report['php'] ?? array() ),
 			'reasons'  => (array) ( $report['reasons'] ?? array() ),
