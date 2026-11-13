@@ -19,6 +19,13 @@ defined( 'ABSPATH' ) || exit;
 class Updates {
 
 	/**
+	 * Adds and removals.
+	 *
+	 * @var Operations|null
+	 */
+	private ?Operations $operations = null;
+
+	/**
 	 * Every pending plugin, theme and core update.
 	 *
 	 * @return array<int, array{key: string, type: string, id: string, slug: string, name: string, from: string, to: string, package: string}>
@@ -83,6 +90,12 @@ class Updates {
 	 * @return array|null
 	 */
 	public function find( string $key ): ?array {
+		if ( Operations::is_operation_key( $key ) ) {
+			$item = $this->operations()->resolve( $key );
+
+			return is_array( $item ) ? $item : null;
+		}
+
 		foreach ( $this->pending() as $item ) {
 			if ( $item['key'] === $key ) {
 				return $item;
@@ -90,6 +103,42 @@ class Updates {
 		}
 
 		return null;
+	}
+
+	/**
+	 * One item by key with the reason when there is none: a pending update, a
+	 * plugin to add, or a plugin to deactivate or delete.
+	 *
+	 * @param string $key plugin:<file>, theme:<stylesheet>, core, install:<slug>, deactivate:<file> or delete:<file>.
+	 * @return array|\WP_Error
+	 */
+	public function resolve( string $key ) {
+		if ( Operations::is_operation_key( $key ) ) {
+			$item = $this->operations()->resolve( $key );
+
+			return $item ?? new \WP_Error( 'update_rehearsal_unknown_update', __( 'That is not something a rehearsal can run.', 'update-rehearsal' ), array( 'status' => 400 ) );
+		}
+
+		$item = $this->find( $key );
+		if ( $item ) {
+			return $item;
+		}
+
+		/* translators: %s: update key such as plugin:akismet/akismet.php. */
+		return new \WP_Error( 'update_rehearsal_unknown_update', sprintf( __( 'There is no pending update %s.', 'update-rehearsal' ), $key ), array( 'status' => 400 ) );
+	}
+
+	/**
+	 * Adds, removals and searches of plugins.
+	 *
+	 * @return Operations
+	 */
+	public function operations(): Operations {
+		if ( null === $this->operations ) {
+			$this->operations = new Operations();
+		}
+
+		return $this->operations;
 	}
 
 	/**

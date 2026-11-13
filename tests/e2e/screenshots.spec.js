@@ -97,7 +97,7 @@ test.describe.serial( 'Screenshots', () => {
 		offer( '1.1' );
 		await page.goto( '/wp-admin/plugins.php' );
 		const row = page.locator( `tr.plugin-update-tr[data-plugin="${ FIXTURE }"]` );
-		await expect( row.locator( '.urh-note' ) ).toContainText( 'ago: green.' );
+		await expect( row.locator( '.urh-note' ) ).toContainText( /(just now|ago): green\./ );
 		await row.scrollIntoViewIfNeeded();
 		await shot( page, 6 );
 	} );

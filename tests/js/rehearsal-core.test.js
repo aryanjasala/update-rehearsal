@@ -311,3 +311,128 @@ test( 'updateConfirm asks on red and amber, names up to five problems, and not o
 	assert.equal( core.updateConfirm( 'green', [] ).required, false );
 	assert.equal( core.updateConfirm( 'failed', [ 'x' ] ).required, false );
 } );
+
+// ---------------------------------------------------------------------------
+// Adding and removing a plugin.
+// ---------------------------------------------------------------------------
+
+const ADMIN_PAGE =
+	'<ul id="adminmenu"><li><a href="index.php" class="menu-top"><div class="wp-menu-name">Dashboard</div></a></li>' +
+	'<li><a href="plugins.php"><div class="wp-menu-name">Plugins <span class="update-plugins count-2"><span class="plugin-count">2</span></span></div></a></li>' +
+	'<li><a href="admin.php?page=popup-kit&#038;tab=a"><div class="wp-menu-name">Popup Kit</div></a></li>' +
+	'<li><a href="#"><div class="wp-menu-name">Skipped</div></a></li>' +
+	'<li><a href="edit-comments.php"><div class="wp-menu-name">Comments<span class="screen-reader-text">0 Pending</span></div></a></li></ul>' +
+	'<ul><li id="collapse-menu"><a href="/wp-admin/outside.php">Collapse menu</a></li></ul>';
+
+test( 'adminMenu reads the screens of a wp-admin menu by the page they open', () => {
+	const menu = core.adminMenu( ADMIN_PAGE );
+	assert.deepEqual( menu.map( ( item ) => item.key ), [ 'index.php', 'plugins.php', 'admin.php?page=popup-kit&tab=a', 'edit-comments.php' ] );
+	// A badge with a count is not part of the name, so a count that changes is not a missing screen.
+	assert.deepEqual( menu.map( ( item ) => item.label ), [ 'Dashboard', 'Plugins', 'Popup Kit', 'Comments' ] );
+	assert.deepEqual( core.adminMenu( '<p>no menu</p>' ), [] );
+	assert.deepEqual( core.adminMenu( null ), [] );
+} );
+
+test( 'assetsOf lists each script and stylesheet once, without version numbers', () => {
+	const html =
+		'<link rel="stylesheet" id="a" href="https://x.test/wp-content/plugins/popup-kit/popup.css?ver=1.2"/>' +
+		'<link rel="icon" href="/favicon.ico"><link href="/b.css?ver=1&amp;x=2" rel="stylesheet">' +
+		'<script src="/wp-content/plugins/popup-kit/popup.js?ver=1.2" id="x"></script><script>inline()</script>' +
+		'<script src="/wp-content/plugins/popup-kit/popup.js?ver=1.3"></script>';
+	assert.deepEqual( core.assetsOf( html ), [
+		{ url: '/wp-content/plugins/popup-kit/popup.js', type: 'script' },
+		{ url: 'https://x.test/wp-content/plugins/popup-kit/popup.css', type: 'style' },
+		{ url: '/b.css?x=2', type: 'style' },
+	] );
+} );
+
+test( 'assetsAdded is what the page loads after and did not load before', () => {
+	const before = '<script src="/core.js"></script>';
+	const after = '<script src="/core.js?ver=2"></script><script src="/popup.js"></script><link rel="stylesheet" href="/popup.css">';
+	assert.deepEqual( core.assetsAdded( before, after ), [
+		{ url: '/popup.js', type: 'script' },
+		{ url: '/popup.css', type: 'style' },
+	] );
+	assert.deepEqual( core.assetsAdded( after, before ), [] );
+} );
+
+test( 'addedReport counts what the plugin added, and never a negative number', () => {
+	const before = { tables: [ 'wp_posts' ], options: 100, autoload_bytes: 5000, cron: [ 'wp_version_check' ] };
+	const after = { tables: [ 'wp_posts', 'wp_popup_log' ], options: 104, autoload_bytes: 7048, cron: [ 'wp_version_check', 'popup_daily' ] };
+	assert.deepEqual( core.addedReport( before, after, [ 'Popup Kit' ], [ { url: '/p.js', type: 'script', bytes: 10, pages: [ '/' ] } ] ), {
+		tables: [ 'wp_popup_log' ],
+		options: 4,
+		autoload_bytes: 2048,
+		cron: [ 'popup_daily' ],
+		menu: [ 'Popup Kit' ],
+		assets: [ { url: '/p.js', type: 'script', bytes: 10, pages: [ '/' ] } ],
+	} );
+	const shrunk = core.addedReport( after, before, null, null );
+	assert.equal( shrunk.options, 0 );
+	assert.equal( shrunk.autoload_bytes, 0 );
+	assert.deepEqual( shrunk.tables, [] );
+	assert.deepEqual( core.addedReport( {}, {}, null, null ).assets, [] );
+} );
+
+test( 'removedReport and removalReasons name what is left without the plugin', () => {
+	const after = { orphans: { shortcodes: [ { name: 'popup', paths: [ '/a/', '/b/' ] } ], blocks: [ { name: 'popup-kit/box', paths: [ '/a/' ] } ] } };
+	const removed = core.removedReport( after, [ 'Popup Kit' ] );
+	assert.deepEqual( removed, {
+		shortcodes: [ { name: 'popup', pages: [ '/a/', '/b/' ] } ],
+		blocks: [ { name: 'popup-kit/box', pages: [ '/a/' ] } ],
+		menu: [ 'Popup Kit' ],
+	} );
+	assert.deepEqual( core.removalReasons( removed ), [
+		{ code: 'orphan_shortcode', name: 'popup', paths: [ '/a/', '/b/' ] },
+		{ code: 'orphan_block', name: 'popup-kit/box', paths: [ '/a/' ] },
+		{ code: 'missing_screen', name: 'Popup Kit', paths: [] },
+	] );
+	assert.deepEqual( core.removedReport( null, null ), { shortcodes: [], blocks: [], menu: [] } );
+	assert.deepEqual( core.removalReasons( core.removedReport( {}, [] ) ), [] );
+} );
+
+test( 'something left over makes green amber and never makes red better', () => {
+	const reasons = [ { code: 'orphan_block', name: 'x', paths: [] } ];
+	assert.equal( core.withRemovalReasons( 'green', reasons ), 'amber' );
+	assert.equal( core.withRemovalReasons( 'red', reasons ), 'red' );
+	assert.equal( core.withRemovalReasons( 'amber', reasons ), 'amber' );
+	assert.equal( core.withRemovalReasons( 'green', [] ), 'green' );
+} );
+
+test( 'responseBytes reads the size from bytes, or the text when there are none', () => {
+	assert.equal( core.responseBytes( { bytes: new Uint8Array( 12 ) } ), 12 );
+	assert.equal( core.responseBytes( { text: 'abc' } ), 3 );
+	assert.equal( core.responseBytes( null ), 0 );
+} );
+
+// ---------------------------------------------------------------------------
+// Logged-in pages.
+// ---------------------------------------------------------------------------
+
+test( 'loginOf is the role a page is checked as: none for a visitor, administrator for admin screens', () => {
+	assert.equal( core.loginOf( { path: '/' } ), '' );
+	assert.equal( core.loginOf( { admin: true } ), 'administrator' );
+	assert.equal( core.loginOf( { as: 'editor', admin: true } ), 'editor' );
+	assert.equal( core.loginOf( { as: 'visitor' } ), '' );
+	assert.equal( core.loginOf( { as: '', admin: false } ), '' );
+	assert.equal( core.loginOf( null ), '' );
+} );
+
+test( 'groupByLogin puts visitors first, then administrators, then each other role together, keeping the order inside a group', () => {
+	const urls = [
+		{ path: '/a', as: 'editor' },
+		{ path: '/b', as: '' },
+		{ path: '/c', as: 'administrator' },
+		{ path: '/d', as: 'customer' },
+		{ path: '/e', as: 'editor' },
+		{ path: '/f', as: '' },
+	];
+	assert.deepEqual( core.groupByLogin( urls ).map( ( url ) => url.path ), [ '/b', '/f', '/c', '/d', '/a', '/e' ] );
+	assert.deepEqual( core.groupByLogin( null ), [] );
+} );
+
+test( 'compareUrl keeps the role a page was checked as', () => {
+	const side = { status: 200, ms: 5, html: '<p>Hi</p>', errors: [] };
+	assert.equal( core.compareUrl( { path: '/wp-admin/', label: 'Dashboard', admin: true, as: 'editor', compare: false }, side, side ).as, 'editor' );
+	assert.equal( core.compareUrl( { path: '/', label: 'Home' }, side, side ).as, '' );
+} );

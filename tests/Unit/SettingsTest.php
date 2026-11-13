@@ -22,7 +22,10 @@ final class SettingsTest extends PluginTestCase {
 				'scrub_users'      => true,
 				'include_inactive' => false,
 				'include_tables'   => array(),
+				'skip_tables'      => array(),
 				'extra_urls'       => array(),
+				'role_checks'      => false,
+				'check_steps'      => array(),
 				'retention_days'   => 90,
 			),
 			( new Settings() )->all()

@@ -8,17 +8,23 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Try plugin, theme, core and PHP updates on a disposable copy of your site in WordPress Playground, in your browser, before you update for real.
+Try updates, a new plugin, or life without one on a disposable copy of your site, in your browser, before you do it for real.
 
 == Description ==
 
 Updating a plugin, a theme, WordPress or the PHP version on a live site is a gamble. Visual regression services need a public site and an account, and they test after the fact. The PHP compatibility checkers read your code, so they miss what only breaks when it runs.
 
-Update Rehearsal tries the update first, on a copy of your site that runs in WordPress Playground inside your browser. It requests your pages before and after the update, and tells you what broke and which plugin broke it. Nothing on the live site changes.
+Update Rehearsal tries the change first, on a copy of your site that runs in WordPress Playground inside your browser. It requests your pages before and after, and tells you what broke and which plugin broke it. Nothing on the live site changes.
+
+Three things to try on the copy:
+
+* **An update**: plugin, theme or WordPress updates, or a newer PHP version.
+* **A plugin you have not installed yet**: search WordPress.org by name or slug, or choose a zip file. The zip stays in your browser and the copy, and is never sent to your site.
+* **Life without a plugin**: deactivate, or deactivate and delete, one or several of the installed ones.
 
 How a rehearsal works:
 
-1. Tick the updates you want to try, or pick another PHP version, on Tools > Update Rehearsal.
+1. Choose what to try on Tools > Update Rehearsal: tick updates or pick another PHP version, add a plugin, or remove one. "Try on a copy first" on the cards of Plugins > Add New and "Try removing on a copy" in each row of the Plugins screen open it for you.
 2. The plugin packs your database and your themes, plugins and must-use plugins into a bundle, and downloads the update packages the same way the updater would. Premium plugins that add their updates to WordPress work too.
 3. Your browser starts WordPress Playground, loads the bundle into it and requests your home page, your latest posts and pages, an archive, the login page, the dashboard and the Plugins screen.
 4. It applies the updates in the copy (or starts a second copy with the new PHP version) and requests the same pages again.
@@ -30,9 +36,17 @@ What the report shows:
 * **New PHP errors grouped by plugin or theme**, read from the copy's debug.log. An error inside WordPress itself goes to the plugin that called it.
 * **Each page before and after**: HTTP status, response time, new errors, and what changed in the visible text and the page's elements.
 * **A side by side visual compare** of each page, right after the run.
-* **Update for real** links to the normal WordPress update for the same items. Under an amber or red verdict it asks first and names the problems. The report downloads as JSON or HTML.
+* **What an added plugin did**: new database tables, options and autoloaded data, scheduled tasks, admin menu items, and the scripts and stylesheets it puts on each page, with their size.
+* **What a removed plugin left behind**: shortcodes and blocks without their plugin in the content of the pages checked, and admin screens that went missing.
+* **Update, install or deactivate for real** links to the normal WordPress action for the same items. Under an amber or red verdict it asks first and names the problems, and deleting a plugin always asks, because it cannot be undone. The report downloads as JSON or HTML.
 
-The Plugins screen shows "Rehearsed 2 hours ago: green" under each update you rehearsed, and the History tab keeps every report.
+Every report says that it ran on a copy and nothing changed on your site.
+
+The Plugins screen shows "Rehearsed 2 hours ago: green" under each update you rehearsed. The Rehearse tab lists your last rehearsals with a Run again link, and the History tab keeps every report, with a filter for the kind and the verdict.
+
+= Pages as a logged-in person =
+
+The last update may have been fine for visitors and broken the dashboard for every editor. Turn on the logged-in checks on the Settings tab and the copy logs in a throwaway user with the role, made in the copy only, and checks the dashboard and the posts list as an editor, and My account as a customer when WooCommerce is active. Under "Steps to run in the copy" you can add your own, and only three kinds: open a page, log in as a role and open a page (`editor: /wp-admin/edit.php`), and submit a search (`search: coffee`). The report lists each step with its status and errors.
 
 Free and open source under the GPL. No pro version, no upsells, no ads in wp-admin, no tracking. And it stays that way.
 
@@ -48,17 +62,20 @@ The copy sends no email, runs no scheduled tasks and makes no outgoing requests.
 
 = Size limit =
 
-A copy is capped at 100 MB once zipped, which is what your browser downloads. Code and SQL shrink to about a quarter when zipped, so most sites are far under it. The Rehearse tab shows the size first. Measuring reads every plugin and theme file once, so the size is remembered until plugins or themes change. A site over the limit cannot start a rehearsal, and the message names what makes it big: the plugin and theme folders, or the tables.
+A copy is capped at 100 MB once zipped, which is what your browser downloads. Code and SQL shrink to about a quarter when zipped, so most sites are far under it. The Rehearse tab shows the size first. Measuring reads every plugin and theme file once, so the size is remembered until plugins or themes change. A site over the limit cannot start a rehearsal, and the message names what makes it big: the plugin and theme folders, or the tables. For the tables, the screen lists the biggest ones, says what leaving each out hides (sessions, logs, analytics counters, job queues), and lets you tick the ones to copy without their rows.
 
 = For AI agents =
 
-On WordPress 6.9 and later, three read-only abilities list past rehearsals, read one report and give the size of a copy. Running a rehearsal needs a browser, so an agent cannot start one.
+On WordPress 6.9 and later, four read-only abilities list past rehearsals (by kind and verdict), read one report, plan a rehearsal of updates, a plugin to add or a plugin to remove without running it, and give the size of a copy. Running a rehearsal needs a browser, so an agent cannot start one.
 
 = From the command line =
 
 `wp update-rehearsal estimate`
 `wp update-rehearsal updates`
+`wp update-rehearsal search "hello dolly"`
 `wp update-rehearsal bundle --output=bundle.zip`
+`wp update-rehearsal bundle --add=hello-dolly --output=bundle.zip`
+`wp update-rehearsal bundle --delete=akismet --output=bundle.zip`
 `wp update-rehearsal list --verdict=red`
 `wp update-rehearsal show 42`
 `wp update-rehearsal settings --extra-urls=/shop/,/cart/`
@@ -76,6 +93,8 @@ Update Rehearsal uses WordPress Playground, from the WordPress project, to run t
 
 To use a Playground you host yourself, point the `update_rehearsal_playground_remote_url` filter at its remote.html.
 
+When you search for a plugin to add, your site asks WordPress.org (api.wordpress.org), the same way Plugins > Add New does, and downloads the package from downloads.wordpress.org. Nothing is sent when you choose a zip file instead.
+
 The update packages are downloaded by your site from the addresses in WordPress's update data, the same addresses the normal updater uses (downloads.wordpress.org for plugins and themes from WordPress.org, or the address a premium plugin gives).
 
 = Third-party library =
@@ -86,7 +105,15 @@ The plugin ships the published build of the WordPress Playground client, @wp-pla
 
 = Does a rehearsal change anything on my site? =
 
-No. The updates run in the copy, in your browser. The plugin stores the report, and that is all it writes.
+No. The updates, the added plugin or the removal run in the copy, in your browser. The plugin stores the report, and that is all it writes.
+
+= What happens to a zip file I choose? =
+
+It stays in your browser. It goes into the copy and nowhere else, and it is not kept after the rehearsal. To run the rehearsal again you choose the file again.
+
+= Can it rehearse removing a plugin and deleting it? =
+
+Yes. Choose "Deactivate and delete" and the copy deactivates the plugin and deletes it with its uninstall code. The report lists shortcodes and blocks left without it on the pages checked. This site keeps the plugin until you do it yourself, and the link in the report asks first.
 
 = Is the copy exactly my site? =
 

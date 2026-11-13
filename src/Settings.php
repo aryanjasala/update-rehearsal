@@ -20,14 +20,17 @@ final class Settings {
 		'scrub_users'      => true,
 		'include_inactive' => false,
 		'include_tables'   => array(),
+		'skip_tables'      => array(),
 		'extra_urls'       => array(),
+		'role_checks'      => false,
+		'check_steps'      => array(),
 		'retention_days'   => 90,
 	);
 
 	/**
 	 * All settings, with defaults filled in.
 	 *
-	 * @return array{scrub_users: bool, include_inactive: bool, include_tables: string[], extra_urls: string[], retention_days: int}
+	 * @return array{scrub_users: bool, include_inactive: bool, include_tables: string[], skip_tables: string[], extra_urls: string[], role_checks: bool, check_steps: string[], retention_days: int}
 	 */
 	public function all(): array {
 		$saved = get_option( self::OPTION, array() );
@@ -37,7 +40,10 @@ final class Settings {
 			'scrub_users'      => (bool) $all['scrub_users'],
 			'include_inactive' => (bool) $all['include_inactive'],
 			'include_tables'   => self::table_names( (array) $all['include_tables'] ),
+			'skip_tables'      => self::table_names( (array) $all['skip_tables'] ),
 			'extra_urls'       => self::paths( (array) $all['extra_urls'] ),
+			'role_checks'      => (bool) $all['role_checks'],
+			'check_steps'      => self::steps( (array) $all['check_steps'] ),
 			'retention_days'   => max( 1, min( 3650, (int) $all['retention_days'] ) ),
 		);
 	}
@@ -63,6 +69,7 @@ final class Settings {
 		$saved = is_array( $saved ) ? $saved : array();
 
 		update_option( self::OPTION, array_merge( $saved, array_intersect_key( $changes, self::DEFAULTS ) ), false );
+		wp_cache_delete( 'tables', 'update_rehearsal' );
 
 		/**
 		 * Fires after the settings changed.
@@ -174,5 +181,74 @@ final class Settings {
 		}
 
 		return array_values( array_unique( $clean ) );
+	}
+
+	/**
+	 * Cleans the safe steps a rehearsal runs in the copy.
+	 *
+	 * One step per line, and only three kinds: "/path" opens a page as a
+	 * visitor, "editor: /wp-admin/edit.php" logs in as a role first, and
+	 * "search: coffee" submits a search.
+	 *
+	 * @param array $lines Lines.
+	 * @return string[] Clean lines.
+	 */
+	public static function steps( array $lines ): array {
+		$clean = array();
+		foreach ( $lines as $line ) {
+			$step = self::parse_step( is_scalar( $line ) ? (string) $line : '' );
+			if ( $step ) {
+				$clean[] = $step['line'];
+			}
+		}
+
+		return array_values( array_unique( $clean ) );
+	}
+
+	/**
+	 * Reads one step.
+	 *
+	 * @param string $line "/path", "role: /path" or "search: words".
+	 * @return array{line: string, as: string, path: string, search: string}|null
+	 */
+	public static function parse_step( string $line ): ?array {
+		$line = trim( $line );
+		if ( '' === $line || strlen( $line ) > 300 ) {
+			return null;
+		}
+		$as = '';
+		if ( preg_match( '/^([a-z0-9_-]{1,40})\s*:\s*(.+)$/i', $line, $match ) && ! preg_match( '#^[a-z][a-z0-9+.-]*://#i', $line ) ) {
+			$as   = strtolower( $match[1] );
+			$rest = trim( $match[2] );
+		} else {
+			$rest = $line;
+		}
+
+		if ( 'search' === $as ) {
+			$term = trim( preg_replace( '/[\r\n\t<>"\\\\]/', ' ', $rest ) );
+			return '' === $term ? null : array(
+				'line'   => 'search: ' . $term,
+				'as'     => '',
+				'path'   => '/?s=' . rawurlencode( $term ),
+				'search' => $term,
+			);
+		}
+
+		// After a role, only a path on this site: "javascript:alert(1)" is not a step.
+		if ( '' !== $as && 0 !== strpos( $rest, '/' ) && ! preg_match( '#^https?://#i', $rest ) ) {
+			return null;
+		}
+		$paths = self::paths( array( $rest ) );
+		if ( ! $paths ) {
+			return null;
+		}
+		$as = 'visitor' === $as ? '' : sanitize_key( $as );
+
+		return array(
+			'line'   => ( '' !== $as ? $as . ': ' : '' ) . $paths[0],
+			'as'     => $as,
+			'path'   => $paths[0],
+			'search' => '',
+		);
 	}
 }

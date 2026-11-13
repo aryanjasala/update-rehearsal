@@ -113,19 +113,25 @@ class Database {
 	 * Tables copied as structure only, with the reason.
 	 *
 	 * @param array<string, array{rows: int, bytes: int, core: bool}>|null $tables Tables, or null for this site's.
-	 * @return array<string, string> Table => size, pattern or filter.
+	 * @return array<string, string> Table => size, pattern, chosen or filter.
 	 */
 	public function excluded_tables( ?array $tables = null ): array {
 		$tables    = null === $tables ? $this->tables() : $tables;
 		$threshold = Limits::table_size_threshold();
 		$included  = (array) $this->settings->get( 'include_tables' );
+		$chosen    = (array) $this->settings->get( 'skip_tables' );
 		$excluded  = array();
 
 		foreach ( $tables as $name => $table ) {
-			if ( $table['core'] || in_array( $name, $included, true ) ) {
+			if ( $table['core'] ) {
 				continue;
 			}
-			if ( $table['bytes'] > $threshold ) {
+			// A table someone chose to leave out stays out, even when it is also ticked to copy in full.
+			if ( in_array( $name, $chosen, true ) ) {
+				$excluded[ $name ] = 'chosen';
+			} elseif ( in_array( $name, $included, true ) ) {
+				continue;
+			} elseif ( $table['bytes'] > $threshold ) {
 				$excluded[ $name ] = 'size';
 			} elseif ( preg_match( self::NOISE, $name ) ) {
 				$excluded[ $name ] = 'pattern';

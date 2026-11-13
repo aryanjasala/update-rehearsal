@@ -224,6 +224,22 @@ final class RehearsalsTest extends PluginTestCase {
 		$this->assertSame( 'DESC', $args['order'] );
 	}
 
+	public function test_the_list_reads_whole_posts_so_each_rehearsal_costs_no_query_of_its_own(): void {
+		$rehearsals = new Rehearsals();
+		$rehearsals->save( $this->report( 'green' ), 1 );
+		\WP_Query::$queue = array(
+			array(
+				'posts'       => array( $this->posts[100] ),
+				'found_posts' => 1,
+			),
+		);
+		Functions\expect( 'cache_users' )->once()->with( array( 1 ) );
+
+		$found = $rehearsals->list();
+		$this->assertSame( 100, $found['items'][0]['id'] );
+		$this->assertArrayNotHasKey( 'fields', \WP_Query::$made[0] );
+	}
+
 	public function test_purge_deletes_old_reports_in_a_batch(): void {
 		Functions\expect( 'get_posts' )->once()->with(
 			\Mockery::on(

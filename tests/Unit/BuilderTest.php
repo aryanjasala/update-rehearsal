@@ -116,9 +116,9 @@ final class BuilderTest extends PluginTestCase {
 		)->byDefault();
 
 		$this->updates = Mockery::mock( Updates::class );
-		$this->updates->shouldReceive( 'find' )->andReturnUsing(
+		$this->updates->shouldReceive( 'resolve' )->andReturnUsing(
 			function ( $key ) {
-				return $key === $this->item['key'] ? $this->item : null;
+				return $key === $this->item['key'] ? $this->item : new \WP_Error( 'update_rehearsal_unknown_update', 'There is no pending update ' . $key . '.' );
 			}
 		)->byDefault();
 		$this->updates->shouldReceive( 'fetch' )->andReturnUsing(
@@ -243,7 +243,7 @@ final class BuilderTest extends PluginTestCase {
 		$this->assertTrue( $state['done'] );
 		$this->assertSame( 100, $state['percent'] );
 		$names = array_column( $state['files'], 'name' );
-		$this->assertSame( array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json', 'part-001.zip', 'updates/plugin-shop-kit.zip' ), $names );
+		$this->assertSame( array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/operate.php', 'rehearsal/inspect.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json', 'part-001.zip', 'updates/plugin-shop-kit.zip' ), $names );
 
 		$dir = Limits::work_dir() . $state['id'] . '/';
 		$zip = new \ZipArchive();

@@ -23,6 +23,14 @@ final class Report {
 		'name' => 'text',
 	);
 
+	private const LEFT_OVER = array(
+		'name'  => 'text',
+		'pages' => array(
+			'list' => 'text',
+			'max'  => 20,
+		),
+	);
+
 	private const SIDE = array(
 		'status' => 'int',
 		'ms'     => 'int',
@@ -35,6 +43,7 @@ final class Report {
 	 */
 	private const SHAPE = array(
 		'status'   => 'key',
+		'kind'     => 'key',
 		'error'    => 'long',
 		'verdict'  => 'key',
 		'reasons'  => array(
@@ -77,6 +86,7 @@ final class Report {
 				'path'    => 'text',
 				'label'   => 'text',
 				'admin'   => 'bool',
+				'as'      => 'key',
 				'compare' => 'bool',
 				'verdict' => 'key',
 				'errors'  => 'int',
@@ -103,6 +113,48 @@ final class Report {
 				),
 			),
 			'max'  => 100,
+		),
+		'added'    => array(
+			'tables'         => array(
+				'list' => 'text',
+				'max'  => 100,
+			),
+			'options'        => 'int',
+			'autoload_bytes' => 'int',
+			'cron'           => array(
+				'list' => 'text',
+				'max'  => 50,
+			),
+			'menu'           => array(
+				'list' => 'text',
+				'max'  => 50,
+			),
+			'assets'         => array(
+				'list' => array(
+					'url'   => 'text',
+					'type'  => 'key',
+					'bytes' => 'int',
+					'pages' => array(
+						'list' => 'text',
+						'max'  => 20,
+					),
+				),
+				'max'  => 100,
+			),
+		),
+		'removed'  => array(
+			'shortcodes' => array(
+				'list' => self::LEFT_OVER,
+				'max'  => 50,
+			),
+			'blocks'     => array(
+				'list' => self::LEFT_OVER,
+				'max'  => 50,
+			),
+			'menu'       => array(
+				'list' => 'text',
+				'max'  => 50,
+			),
 		),
 		'errors'   => array(
 			'list' => array(
@@ -143,6 +195,7 @@ final class Report {
 	public static function sanitize( array $report ): array {
 		$clean           = self::clean( $report, self::SHAPE );
 		$clean['status'] = 'failed' === $clean['status'] ? 'failed' : 'finished';
+		$clean['kind']   = Operations::kind( (array) $clean['items'] );
 		if ( 'failed' === $clean['status'] ) {
 			$clean['verdict'] = '';
 			return $clean;
@@ -175,8 +228,7 @@ final class Report {
 	public static function title( array $report ): string {
 		$parts = array();
 		foreach ( (array) $report['items'] as $item ) {
-			/* translators: 1: plugin, theme or WordPress, 2: version now, 3: new version. */
-			$parts[] = sprintf( __( '%1$s %2$s to %3$s', 'update-rehearsal' ), $item['name'], $item['from'], $item['to'] );
+			$parts[] = self::item_title( (array) $item );
 		}
 		if ( '' !== $report['php']['to'] && $report['php']['to'] !== $report['php']['from'] ) {
 			/* translators: 1: PHP version now, 2: PHP version tried. */
@@ -184,6 +236,33 @@ final class Report {
 		}
 
 		return $parts ? implode( ', ', $parts ) : __( 'Rehearsal', 'update-rehearsal' );
+	}
+
+	/**
+	 * One item in words: an update, a plugin to add or a plugin to remove.
+	 *
+	 * @param array $item Report item: type, name, from, to.
+	 * @return string
+	 */
+	public static function item_title( array $item ): string {
+		$name = (string) ( $item['name'] ?? '' );
+		switch ( $item['type'] ?? '' ) {
+			case 'install':
+				/* translators: 1: plugin name, 2: version. */
+				return trim( sprintf( __( 'Add %1$s %2$s', 'update-rehearsal' ), $name, (string) ( $item['to'] ?? '' ) ) );
+			case 'upload':
+				/* translators: %s: plugin name. */
+				return sprintf( __( 'Add %s from a zip file', 'update-rehearsal' ), $name );
+			case 'deactivate':
+				/* translators: %s: plugin name. */
+				return sprintf( __( 'Deactivate %s', 'update-rehearsal' ), $name );
+			case 'delete':
+				/* translators: %s: plugin name. */
+				return sprintf( __( 'Deactivate and delete %s', 'update-rehearsal' ), $name );
+			default:
+				/* translators: 1: plugin, theme or WordPress, 2: version now, 3: new version. */
+				return sprintf( __( '%1$s %2$s to %3$s', 'update-rehearsal' ), $name, (string) ( $item['from'] ?? '' ), (string) ( $item['to'] ?? '' ) );
+		}
 	}
 
 	/**

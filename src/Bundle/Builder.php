@@ -8,6 +8,7 @@
 namespace AryanX\Axle\UpdateRehearsal\Bundle;
 
 use AryanX\Axle\UpdateRehearsal\Limits;
+use AryanX\Axle\UpdateRehearsal\Operations;
 use AryanX\Axle\UpdateRehearsal\Settings;
 use AryanX\Axle\UpdateRehearsal\TestUrls;
 use AryanX\Axle\UpdateRehearsal\Updates;
@@ -130,14 +131,29 @@ class Builder {
 		}
 
 		$items = array();
+		$user  = (int) ( $args['user'] ?? get_current_user_id() );
 		foreach ( array_unique( array_map( 'strval', (array) ( $args['items'] ?? array() ) ) ) as $key ) {
-			$item = $this->updates->find( $key );
-			if ( ! $item ) {
-				/* translators: %s: update key such as plugin:akismet/akismet.php. */
-				return new \WP_Error( 'update_rehearsal_unknown_update', sprintf( __( 'There is no pending update %s.', 'update-rehearsal' ), $key ), array( 'status' => 400 ) );
+			// A zip chosen in the browser stays in the browser: the browser puts it into the copy itself.
+			if ( 0 === strpos( $key, 'upload:' ) ) {
+				continue;
+			}
+			$item = $this->updates->resolve( $key );
+			if ( is_wp_error( $item ) ) {
+				return $item;
+			}
+			if ( 'cli' !== $context && ! Operations::can( $item, $user ) ) {
+				/* translators: %s: item name. */
+				return new \WP_Error( 'update_rehearsal_forbidden', sprintf( __( 'You are not allowed to do this to %s, so you cannot rehearse it.', 'update-rehearsal' ), $item['name'] ), array( 'status' => 403 ) );
+			}
+			if ( in_array( $item['type'], array( 'deactivate', 'delete' ), true ) ) {
+				$items[] = $item;
+				continue;
 			}
 			$item['file'] = 'updates/' . $item['type'] . '-' . sanitize_file_name( $item['slug'] ) . '.zip';
 			$items[]      = $item;
+		}
+		if ( count( array_unique( array_map( array( Operations::class, 'kind_of_type' ), array_column( $items, 'type' ) ) ) ) > 1 ) {
+			return new \WP_Error( 'update_rehearsal_mixed_kinds', __( 'Rehearse updates, adding a plugin and removing a plugin one at a time. They are different rehearsals.', 'update-rehearsal' ), array( 'status' => 400 ) );
 		}
 
 		$php = (string) ( $args['php'] ?? '' );
@@ -169,7 +185,7 @@ class Builder {
 
 		$job = array(
 			'id'           => $id,
-			'user'         => (int) ( $args['user'] ?? get_current_user_id() ),
+			'user'         => $user,
 			'context'      => $context,
 			'created'      => time(),
 			'phase'        => 'database',
@@ -483,6 +499,15 @@ class Builder {
 			return;
 		}
 
+		// A removal has no package.
+		if ( empty( $item['file'] ) ) {
+			++$job['package'];
+			if ( $job['package'] >= count( $job['items'] ) ) {
+				$job['phase'] = 'finish';
+			}
+			return;
+		}
+
 		$dest = $this->dir( $job['id'] ) . $item['file'];
 		wp_mkdir_p( dirname( $dest ) );
 		$fetched = $this->updates->fetch( $item, $dest );
@@ -514,6 +539,8 @@ class Builder {
 		Files::write( $dir . 'rehearsal/setup.php', Scripts::setup() );
 		Files::write( $dir . 'rehearsal/apply.php', Scripts::apply() );
 		Files::write( $dir . 'rehearsal/mu-plugin.php', Scripts::mu_plugin() );
+		Files::write( $dir . 'rehearsal/operate.php', Scripts::operate() );
+		Files::write( $dir . 'rehearsal/inspect.php', Scripts::inspect() );
 
 		$job['phase'] = 'done';
 		$manifest     = $this->manifest( $job );
@@ -575,6 +602,8 @@ class Builder {
 			$updates[] = $item;
 		}
 
+		$test_urls = $this->urls->all();
+
 		return array(
 			'format'         => 1,
 			'plugin_version' => VERSION,
@@ -601,7 +630,9 @@ class Builder {
 			'plugins'        => $plugins,
 			'scrubbed'       => $this->settings->scrub_users(),
 			'tables'         => array_column( $job['tables'], 'mode', 'name' ),
-			'test_urls'      => $this->urls->all(),
+			'test_urls'      => $test_urls,
+			'kind'           => Operations::kind( $job['items'] ),
+			'roles'          => TestUrls::roles_of( $test_urls ),
 			'updates'        => $updates,
 			'sizes'          => array(
 				'database' => $job['sql_bytes'],
@@ -678,7 +709,7 @@ class Builder {
 	 */
 	private function public_files( array $job ): array {
 		return array_merge(
-			array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json' ),
+			array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/operate.php', 'rehearsal/inspect.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json' ),
 			$job['parts'],
 			array_column( $job['items'], 'file' )
 		);

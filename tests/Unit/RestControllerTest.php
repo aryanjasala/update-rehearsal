@@ -11,6 +11,8 @@ use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
 use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
 use AryanX\Axle\UpdateRehearsal\Rehearsals;
 use AryanX\Axle\UpdateRehearsal\Rest\Controller;
+use AryanX\Axle\UpdateRehearsal\Settings;
+use AryanX\Axle\UpdateRehearsal\Updates;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;
@@ -54,7 +56,7 @@ final class RestControllerTest extends PluginTestCase {
 	}
 
 	private function controller(): Controller {
-		return new Controller( $this->builder, $this->estimate, $this->rehearsals );
+		return new Controller( $this->builder, $this->estimate, $this->rehearsals, new Settings(), Mockery::mock( Updates::class ) );
 	}
 
 	public function test_routes_are_registered_with_permission_callbacks(): void {
@@ -71,7 +73,7 @@ final class RestControllerTest extends PluginTestCase {
 		$controller->routes();
 
 		$this->assertSame(
-			array( '/estimate', '/bundles', '/bundles/(?P<id>[a-f0-9]{32})/step', '/bundles/(?P<id>[a-f0-9]{32})', '/bundles/(?P<id>[a-f0-9]{32})/file', '/rehearsals', '/rehearsals/(?P<id>\d+)' ),
+			array( '/estimate', '/plugins/search', '/skip-tables', '/bundles', '/bundles/(?P<id>[a-f0-9]{32})/step', '/bundles/(?P<id>[a-f0-9]{32})', '/bundles/(?P<id>[a-f0-9]{32})/file', '/rehearsals', '/rehearsals/(?P<id>\d+)' ),
 			array_keys( $routes )
 		);
 		foreach ( $routes as $route => $args ) {
@@ -173,6 +175,7 @@ final class RestControllerTest extends PluginTestCase {
 				'per_page' => 5,
 				'page'     => 2,
 				'verdict'  => 'red',
+				'kind'     => '',
 			)
 		)->andReturn(
 			array(
@@ -193,10 +196,17 @@ final class RestControllerTest extends PluginTestCase {
 		$this->assertSame( '7', $response->headers['X-WP-Total'] );
 
 		$this->rehearsals->shouldReceive( 'save' )->once()->with( array( 'verdict' => 'green' ), 1 )->andReturn( array( 'id' => 9 ) );
+		$this->rehearsals->shouldReceive( 'for_screen' )->once()->with( array( 'id' => 9 ) )->andReturn(
+			array(
+				'id'        => 9,
+				'when_html' => '<time>now</time>',
+			)
+		);
 		$this->assertSame(
 			array(
-				'id'  => 9,
-				'url' => 'https://example.test/wp-admin/tools.php?page=update-rehearsal&rehearsal=9',
+				'id'        => 9,
+				'when_html' => '<time>now</time>',
+				'url'       => 'https://example.test/wp-admin/tools.php?page=update-rehearsal&rehearsal=9',
 			),
 			$this->controller()->save_rehearsal( new \WP_REST_Request( array( 'report' => array( 'verdict' => 'green' ) ) ) )->get_data()
 		);
