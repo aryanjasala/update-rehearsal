@@ -86,12 +86,15 @@ npx @wp-playground/cli@latest server --mount=./bundle:/urh --blueprint=./bundle/
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-2.png" alt="A rehearsal running: the copy of the site in WordPress Playground, inside the screen"><br><sub>A rehearsal running: the copy of the site in WordPress Playground, inside the screen</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-3.png" alt="A red verdict: the update broke the front end, and the report names the plugin"><br><sub>A red verdict: the update broke the front end, and the report names the plugin</sub></td>
+    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-3.png" alt="A red verdict: the update broke the front end, and the report names the plugin. Download report is one control, and Update for real is a plain link under red"><br><sub>A red verdict: the update broke the front end, and the report names the plugin. Download report is one control, and Update for real is a plain link under red</sub></td>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-4.png" alt="A green verdict with each page before and after"><br><sub>A green verdict with each page before and after</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-5.png" alt="The visual compare, side by side"><br><sub>The visual compare, side by side</sub></td>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-6.png" alt="The Plugins screen: the latest rehearsal under the update notice"><br><sub>The Plugins screen: the latest rehearsal under the update notice</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-7.png" alt="A report with the checkout and a form: each step before and after, and the step that broke"><br><sub>A report with the checkout and a form: each step before and after, and the step that broke</sub></td>
   </tr>
 </table>
 

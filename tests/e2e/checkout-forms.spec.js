@@ -11,6 +11,23 @@ const GUARD = 'urh-e2e-live-guard.php';
 
 const rehearsals = () => JSON.parse( wp( 'update-rehearsal', 'list', '--format=json', '--fields=id,title,verdict,status' ) );
 const show = ( id ) => JSON.parse( wp( 'update-rehearsal', 'show', String( id ), '--format=json' ) );
+// Deleting a plugin leaves its tables, options, pages and roles behind, and other specs count tables. Take it all out.
+const forgetShop = () =>
+	wpEval( `
+		global $wpdb;
+		foreach ( $wpdb->get_col( 'SHOW TABLES' ) as $table ) {
+			if ( preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '(wc_|woocommerce_|actionscheduler_)/', $table ) ) {
+				$wpdb->query( "DROP TABLE IF EXISTS \`$table\`" );
+			}
+		}
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name REGEXP '^(woocommerce_|wc_|_transient_wc|_transient_timeout_wc|wpcf7|action_scheduler|widget_woocommerce|_transient_timeout__woocommerce|_transient__woocommerce|_site_transient_wc)' OR option_name IN ( 'recently_activated', 'woocommerce_version', 'woocommerce_db_version' )" );
+		$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN ( SELECT ID FROM {$wpdb->posts} WHERE post_type IN ( 'product', 'product_variation', 'shop_order', 'shop_order_placehold', 'shop_coupon', 'wpcf7_contact_form', 'scheduled-action' ) OR ( post_type = 'page' AND post_name REGEXP '^(shop|cart|checkout|my-account|refund_returns)(-[0-9]+)?$' ) )" );
+		$wpdb->query( "DELETE FROM {$wpdb->posts} WHERE post_type IN ( 'product', 'product_variation', 'shop_order', 'shop_order_placehold', 'shop_coupon', 'wpcf7_contact_form', 'scheduled-action' ) OR ( post_type = 'page' AND post_name REGEXP '^(shop|cart|checkout|my-account|refund_returns)(-[0-9]+)?$' )" );
+		remove_role( 'customer' );
+		remove_role( 'shop_manager' );
+		wp_clear_scheduled_hook( 'woocommerce_cleanup_sessions' );
+	` );
+
 const reset = () =>
 	wpEval( "foreach ( get_posts( array( 'post_type' => 'upd_rehearsal', 'post_status' => 'any', 'fields' => 'ids', 'numberposts' => -1 ) ) as $id ) { wp_delete_post( $id, true ); } delete_option( 'update_rehearsal_latest' ); delete_option( 'update_rehearsal_settings' ); delete_transient( 'update_rehearsal_code_size' );" );
 
@@ -210,6 +227,7 @@ test.describe( 'Update Rehearsal: rehearse a checkout and a form', () => {
 				' );
 				delete_option( 'urh_live_events' );
 				// A form of our own: the sample form is only made on a web request, and a leftover one can block it.
+				foreach ( get_posts( array( 'post_type' => 'wpcf7_contact_form', 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $old ) { wp_delete_post( $old, true ); }
 				$form = WPCF7_ContactForm::get_template( array( 'title' => 'Rehearsal contact' ) );
 				$form->save();
 			` );
@@ -235,6 +253,7 @@ test.describe( 'Update Rehearsal: rehearse a checkout and a form', () => {
 		} catch ( error ) {
 			// Not installed.
 		}
+		forgetShop();
 		removeFixture();
 	} );
 

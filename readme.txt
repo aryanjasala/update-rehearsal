@@ -160,10 +160,11 @@ The bundle is built in a temp folder, the system one by default. If your host do
 
 1. Tools > Update Rehearsal: pick the updates or a PHP version. The pages to check and the size of the copy are below.
 2. A rehearsal running: the copy of the site in WordPress Playground, inside the screen.
-3. A red verdict: the update broke the front end, and the report names the plugin.
+3. A red verdict: the update broke the front end, and the report names the plugin. Download report is one control, and Update for real is a plain link under red.
 4. A green verdict with each page before and after.
 5. The visual compare, side by side.
 6. The Plugins screen: the latest rehearsal under the update notice.
+7. A report with the checkout and a form: each step before and after, and the step that broke.
 
 == Changelog ==
 
