@@ -802,6 +802,145 @@
 		return current === 'green' && ( reasons || [] ).length ? 'amber' : current;
 	}
 
+	// ---------------------------------------------------------------------
+	// Rules from Axle Smoke Test, and checkout and form checks.
+	// ---------------------------------------------------------------------
+
+	const TAGS = [ 'a', 'article', 'aside', 'button', 'footer', 'form', 'h1', 'h2', 'h3', 'header', 'img', 'input', 'main', 'nav', 'section', 'select', 'table', 'textarea', 'ul' ];
+
+	/**
+	 * Whether a Smoke Test rule is a CSS selector and not text. Same reading as
+	 * Smoke Test: starts with ".", "#" or "[", is a plain HTML tag name, or
+	 * starts with "css:". "text:" forces text.
+	 *
+	 * @param {string} rule Rule.
+	 * @return {boolean} True for a selector.
+	 */
+	function isSelectorRule( rule ) {
+		const text = String( rule || '' ).trim();
+		if ( /^text:/i.test( text ) ) {
+			return false;
+		}
+		return /^(?:css:|[.#[])/i.test( text ) || TAGS.indexOf( text.toLowerCase() ) !== -1;
+	}
+
+	/**
+	 * Which rules a page breaks.
+	 *
+	 * @param {string}   html     Page HTML.
+	 * @param {Object}   rules    must and must_not: lists of text or selectors.
+	 * @param {Function} selector Optional (html, selector) => boolean | null. null when it cannot be read.
+	 * @return {string[]} Problems, such as: The page must contain "Add to cart", but it does not.
+	 */
+	function ruleFindings( html, rules, selector ) {
+		const out = [];
+		const text = visibleText( html ).join( '\n' ).toLowerCase();
+		[ 'must', 'must_not' ].forEach( function ( kind ) {
+			( ( rules && rules[ kind ] ) || [] ).forEach( function ( rule ) {
+				const raw = String( rule );
+				const plain = raw.replace( /^(?:text:|css:)/i, '' ).trim();
+				let found;
+				if ( isSelectorRule( raw ) ) {
+					found = typeof selector === 'function' ? selector( html, plain ) : null;
+					if ( found === null || found === undefined ) {
+						return;
+					}
+				} else {
+					found = plain !== '' && text.indexOf( plain.toLowerCase() ) !== -1;
+				}
+				if ( kind === 'must' && ! found ) {
+					out.push( 'The page must contain "' + plain + '", but it does not.' );
+				} else if ( kind === 'must_not' && found ) {
+					out.push( 'The page must not contain "' + plain + '", but it does.' );
+				}
+			} );
+		} );
+		return out;
+	}
+
+	/**
+	 * Rule problems that are new after the change.
+	 *
+	 * @param {string[]} before Problems before.
+	 * @param {string[]} after  Problems after.
+	 * @return {string[]} The new ones.
+	 */
+	function newRuleFindings( before, after ) {
+		return ( after || [] ).filter( ( finding ) => ( before || [] ).indexOf( finding ) === -1 );
+	}
+
+	/**
+	 * Compares a check before and after the change.
+	 *
+	 * Steps carry id, label, state (ok, failed or skipped) and message. A step
+	 * that works before and fails after is a break. One that fails both times
+	 * was never working, which is worth a look but not blamed on the change.
+	 *
+	 * @param {Object[]} before Steps before.
+	 * @param {Object[]} after  Steps after.
+	 * @return {{result: string, step: string, message: string}} result: ok, broke, failed_both or skipped.
+	 */
+	function judgeCheck( before, after ) {
+		const was = {};
+		( before || [] ).forEach( function ( step ) {
+			was[ step.id ] = step;
+		} );
+		const failedBoth = [];
+		let broke = null;
+		( after || [] ).forEach( function ( step ) {
+			if ( step.state !== 'failed' ) {
+				return;
+			}
+			const earlier = was[ step.id ];
+			if ( earlier && earlier.state === 'failed' ) {
+				failedBoth.push( step );
+			} else if ( ! broke ) {
+				broke = step;
+			}
+		} );
+		if ( broke ) {
+			return { result: 'broke', step: broke.label, message: broke.message || '' };
+		}
+		if ( failedBoth.length ) {
+			return { result: 'failed_both', step: failedBoth[ 0 ].label, message: failedBoth[ 0 ].message || '' };
+		}
+		const worked = ( after || [] ).some( ( step ) => step.state === 'ok' );
+		return { result: worked ? 'ok' : 'skipped', step: '', message: '' };
+	}
+
+	/**
+	 * Reasons from the checkout and form checks.
+	 *
+	 * @param {Object[]} checks Checks with name, result, step and message.
+	 * @return {Object[]} Reasons: code (check_broke or check_failed_both), name, step, message.
+	 */
+	function checkReasons( checks ) {
+		const out = [];
+		( checks || [] ).forEach( function ( check ) {
+			if ( check.result === 'broke' ) {
+				out.push( { code: 'check_broke', name: check.name, step: check.step, message: check.message } );
+			} else if ( check.result === 'failed_both' ) {
+				out.push( { code: 'check_failed_both', name: check.name, step: check.step, message: check.message } );
+			}
+		} );
+		return out;
+	}
+
+	/**
+	 * The verdict once check reasons are counted: a break is red, a check that
+	 * never worked makes a green rehearsal amber.
+	 *
+	 * @param {string}   current Verdict so far.
+	 * @param {Object[]} reasons From checkReasons().
+	 * @return {string} Verdict.
+	 */
+	function withCheckReasons( current, reasons ) {
+		if ( ( reasons || [] ).some( ( reason ) => reason.code === 'check_broke' ) ) {
+			return 'red';
+		}
+		return current === 'green' && ( reasons || [] ).length ? 'amber' : current;
+	}
+
 	/**
 	 * The size of a file the copy served, from the response.
 	 *
@@ -895,6 +1034,12 @@
 		removedReport,
 		removalReasons,
 		withRemovalReasons,
+		isSelectorRule,
+		ruleFindings,
+		newRuleFindings,
+		judgeCheck,
+		checkReasons,
+		withCheckReasons,
 		responseBytes,
 		loginOf,
 		groupByLogin,

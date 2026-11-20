@@ -31,6 +31,8 @@ const versions = ( name ) => ( {
 	'1.0': plugin( '1.0', '', name ),
 	'1.1': plugin( '1.1', '// 1.1: same output, tidier code.\n', name ),
 	'1.2': plugin( '1.2', "add_action( 'template_redirect', function () {\n\trender_nutrition_table();\n} );\n", name ),
+	// 1.3 looks fine on every page but breaks the checkout (no payment method) and the contact form (no email).
+	'1.3': plugin( '1.3', "add_filter( 'woocommerce_payment_gateways', '__return_empty_array', 99 );\nadd_filter( 'wpcf7_skip_mail', '__return_true', 99 );\n", name ),
 } );
 
 const MU = `<?php
@@ -81,7 +83,7 @@ function installFixture( name = NAME ) {
 		file_put_contents( WP_PLUGIN_DIR . '/${ FIXTURE }', $versions['1.0'] );
 		$dir = WP_CONTENT_DIR . '/uploads/urh-fixtures';
 		wp_mkdir_p( $dir );
-		foreach ( array( '1.1', '1.2' ) as $v ) {
+		foreach ( array( '1.1', '1.2', '1.3' ) as $v ) {
 			$zip = new ZipArchive();
 			$zip->open( "$dir/${ SLUG }-$v.zip", ZipArchive::CREATE | ZipArchive::OVERWRITE );
 			$zip->addFromString( '${ FIXTURE }', $versions[ $v ] );
@@ -121,7 +123,7 @@ function removeFixture() {
 		// Not active.
 	}
 	wpEval( `
-		foreach ( array( WP_PLUGIN_DIR . '/${ FIXTURE }', WPMU_PLUGIN_DIR . '/${ HELPER }', WP_CONTENT_DIR . '/uploads/urh-fixtures/${ SLUG }-1.1.zip', WP_CONTENT_DIR . '/uploads/urh-fixtures/${ SLUG }-1.2.zip' ) as $file ) {
+		foreach ( array( WP_PLUGIN_DIR . '/${ FIXTURE }', WPMU_PLUGIN_DIR . '/${ HELPER }', WP_CONTENT_DIR . '/uploads/urh-fixtures/${ SLUG }-1.1.zip', WP_CONTENT_DIR . '/uploads/urh-fixtures/${ SLUG }-1.2.zip', WP_CONTENT_DIR . '/uploads/urh-fixtures/${ SLUG }-1.3.zip' ) as $file ) {
 			@unlink( $file );
 		}
 		@rmdir( WP_PLUGIN_DIR . '/${ SLUG }' );
@@ -152,6 +154,52 @@ const report = ( verdict ) => ( {
 	sources: [],
 } );
 
+// A report with a checkout and a form, before and after, as the browser stores it.
+const checksReport = ( verdict ) => {
+	const ok = ( id, label, message = '' ) => ( { id, label, state: 'ok', message, ms: 120 } );
+	const bad = ( id, label, message ) => ( { id, label, state: 'failed', message, ms: 90 } );
+	const skipped = ( id, label, message ) => ( { id, label, state: 'skipped', message, ms: 0 } );
+	const broke = verdict === 'red';
+	return Object.assign( report( verdict ), {
+		reasons: broke ? [ 'Place a test order broke at "Place the order" after the change: Invalid payment method.' ] : [],
+		checks: [
+			{
+				id: 'checkout',
+				kind: 'checkout',
+				plugin: 'woocommerce',
+				name: 'Place a test order',
+				result: broke ? 'broke' : 'ok',
+				step: broke ? 'Place the order' : '',
+				message: broke ? 'Invalid payment method.' : '',
+				before: [ ok( 'shop', 'The shop is ready in the copy', 'Mug' ), ok( 'cart', 'Add the product to the cart' ), ok( 'order', 'Place the order', 'Order 10' ), ok( 'record', 'The order exists in the shop', 'Status on-hold, 1 item(s)' ), ok( 'mail', 'The order emails are produced', "You've got a new order: #10" ) ],
+				after: broke
+					? [ ok( 'shop', 'The shop is ready in the copy', 'Mug' ), ok( 'cart', 'Add the product to the cart' ), bad( 'order', 'Place the order', 'Invalid payment method.' ), skipped( 'record', 'The order exists in the shop', 'Not reached.' ), skipped( 'mail', 'The order emails are produced', 'Not reached.' ) ]
+					: [ ok( 'shop', 'The shop is ready in the copy', 'Mug' ), ok( 'cart', 'Add the product to the cart' ), ok( 'order', 'Place the order', 'Order 11' ), ok( 'record', 'The order exists in the shop', 'Status on-hold, 1 item(s)' ), ok( 'mail', 'The order emails are produced', "You've got a new order: #11" ) ],
+			},
+			{
+				id: 'cf7:7',
+				kind: 'form',
+				plugin: 'cf7',
+				name: 'Contact form',
+				result: 'ok',
+				step: '',
+				message: '',
+				before: [ ok( 'send', 'Send the form' ), skipped( 'entry', 'The entry is saved', 'Contact Form 7 keeps no entries on its own, so the email is the record.' ), ok( 'mail', 'The email is produced', 'Contact: Rehearsal' ) ],
+				after: [ ok( 'send', 'Send the form' ), skipped( 'entry', 'The entry is saved', 'Contact Form 7 keeps no entries on its own, so the email is the record.' ), ok( 'mail', 'The email is produced', 'Contact: Rehearsal' ) ],
+			},
+		],
+	} );
+};
+
+// A run that was interrupted: the person left the page.
+const stoppedReport = () => ( {
+	status: 'failed',
+	stopped: true,
+	error: 'Stopped: you left the page.',
+	items: [ { key: `plugin:${ FIXTURE }`, type: 'plugin', name: 'Recipe Cards', from: '1.0', to: '1.1' } ],
+	php: { from: '8.3', to: '8.3' },
+} );
+
 /**
  * Stores a report the way a finished rehearsal does, for screens that show one.
  *
@@ -161,6 +209,27 @@ const report = ( verdict ) => ( {
  */
 async function storeReport( rest, verdict ) {
 	return ( await rest( 'POST', '/update-rehearsal/v1/rehearsals', { report: report( verdict ) } ) ).body;
+}
+
+/**
+ * Stores a report that has checkout and form steps.
+ *
+ * @param {Function} rest    The rest() fixture.
+ * @param {string}   verdict green or red.
+ * @return {Promise<Object>} The stored rehearsal.
+ */
+async function storeChecksReport( rest, verdict ) {
+	return ( await rest( 'POST', '/update-rehearsal/v1/rehearsals', { report: checksReport( verdict ) } ) ).body;
+}
+
+/**
+ * Stores a run that was stopped because the person left the page.
+ *
+ * @param {Function} rest The rest() fixture.
+ * @return {Promise<Object>} The stored rehearsal.
+ */
+async function storeStopped( rest ) {
+	return ( await rest( 'POST', '/update-rehearsal/v1/rehearsals', { report: stoppedReport() } ) ).body;
 }
 
 
@@ -445,4 +514,4 @@ async function storeRemoveReport( rest, type = 'deactivate' ) {
 	 ).body;
 }
 
-module.exports = { storeAddReport, storeRemoveReport, POPUP, POPUP_FILE, popupZip, buildZip, installPopup, removePopup, fakeApi, serveZip, unserveZip, SLUG, FIXTURE, NAME, installFixture, removeFixture, offer, liveVersion, report, storeReport };
+module.exports = { storeAddReport, storeRemoveReport, POPUP, POPUP_FILE, popupZip, buildZip, installPopup, removePopup, fakeApi, serveZip, unserveZip, SLUG, FIXTURE, NAME, installFixture, removeFixture, offer, liveVersion, report, storeReport, storeChecksReport, storeStopped };

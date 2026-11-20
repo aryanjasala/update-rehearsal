@@ -35,14 +35,15 @@ Updating a plugin, a theme, WordPress or the PHP version on a live site is a gam
 - **Try a plugin before you install it**: search WordPress.org by name or slug, or choose a zip file that stays in your browser. The report lists what the plugin added: tables, options, autoloaded bytes, scheduled tasks, admin menu items, and the scripts and stylesheets it puts on each page, with their size
 - **Try life without a plugin**: deactivate, or deactivate and delete, one or several installed plugins on the copy. The report lists shortcodes and blocks left without their plugin on the pages checked, and admin screens that went missing
 - **Pages as a logged-in person**: the copy logs in a throwaway user with a role and checks the dashboard and posts list as an editor, My account as a customer when WooCommerce is active, and any steps you write: open a page, log in as a role, submit a search
+- **A checkout and a form, before and after**: the copy turns on an offline payment method, orders an in-stock product through the Store API, sends your Contact Form 7, Gravity Forms or WPForms forms, checks the order, the entry and the emails the copy would have sent, and the report names the step that broke. It never happens on your site
 - **Entry points where you are**: "Try on a copy first" on the cards of Plugins > Add New, and "Try removing on a copy" in the row of each installed plugin
 - **PHP upgrades**: a second copy runs your pages on PHP 7.4 to 8.5 and reports what the new version broke or deprecated
 - **A verdict**: green (nothing new), amber (warnings, deprecations, visible changes) or red (fatal error, 500, blank page)
 - **New PHP errors by plugin or theme**, read from the copy's debug.log; an error inside WordPress goes to the plugin that called it
 - **Each page before and after**: status, response time, new errors, a diff of the visible text and elements, and a side by side visual compare
-- **A safe copy**: no transients or sessions, emails and password hashes replaced, no uploads, and the copy sends no email, runs no cron and makes no outgoing requests
+- **A safe copy**: no transients, sessions or application passwords; emails, phone numbers, IP addresses and secret-looking option values replaced (the readme lists exactly what is replaced and what is kept); no uploads; and the copy sends no email, runs no cron and makes no outgoing requests
 - **Size first**: the screen shows how big the copy is once zipped, and refuses a site over the 100 MB limit, naming the biggest tables and plugin folders. Tick the tables you can do without (logs, sessions, analytics) and it says what leaving each one out hides
-- **Update, install or deactivate for real** links that ask first under amber or red and name the problems, JSON and HTML report downloads, "Rehearsed 2 hours ago: green" on the Plugins screen, and the last rehearsals with a Run again link
+- **Update, install or deactivate for real** links that ask first under amber or red and name the problems (a plain link under red), one Download report control for JSON and HTML, a warning before you leave a run and a History entry when you did, "Rehearsed 2 hours ago: green" on the Plugins screen
 - WP-CLI, a bundle for @wp-playground/cli in CI, abilities for AI agents, and a hook for every default
 
 ## Install
@@ -85,12 +86,15 @@ npx @wp-playground/cli@latest server --mount=./bundle:/urh --blueprint=./bundle/
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-2.png" alt="A rehearsal running: the copy of the site in WordPress Playground, inside the screen"><br><sub>A rehearsal running: the copy of the site in WordPress Playground, inside the screen</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-3.png" alt="A red verdict: the update broke the front end, and the report names the plugin"><br><sub>A red verdict: the update broke the front end, and the report names the plugin</sub></td>
+    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-3.png" alt="A red verdict: the update broke the front end, and the report names the plugin. Download report is one control, and Update for real is a plain link under red"><br><sub>A red verdict: the update broke the front end, and the report names the plugin. Download report is one control, and Update for real is a plain link under red</sub></td>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-4.png" alt="A green verdict with each page before and after"><br><sub>A green verdict with each page before and after</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-5.png" alt="The visual compare, side by side"><br><sub>The visual compare, side by side</sub></td>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-6.png" alt="The Plugins screen: the latest rehearsal under the update notice"><br><sub>The Plugins screen: the latest rehearsal under the update notice</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-7.png" alt="A report with the checkout and a form: each step before and after, and the step that broke"><br><sub>A report with the checkout and a form: each step before and after, and the step that broke</sub></td>
   </tr>
 </table>
 
@@ -98,7 +102,7 @@ npx @wp-playground/cli@latest server --mount=./bundle:/urh --blueprint=./bundle/
 
 | Doc | What it covers |
 | --- | --- |
-| [Reference](docs/REFERENCE.md) | How a rehearsal runs, the three kinds, logged-in checks, verdicts, hooks, abilities, WP-CLI, CI, the bundle format, data and privacy |
+| [Reference](docs/REFERENCE.md) | How a rehearsal runs, the three kinds, logged-in checks, checkout and forms, verdicts, hooks, abilities, WP-CLI, CI, the bundle format, data and privacy (what the copy keeps and replaces) |
 | [Development](docs/DEVELOPMENT.md) | Local setup, commands and tests |
 | [Contributing](docs/CONTRIBUTING.md) | Pull requests, required checks and PR titles |
 | [Releasing](docs/RELEASING.md) | How merged pull requests become releases |
@@ -116,12 +120,14 @@ src/
 ├── Updates.php           pending updates and their packages
 ├── Operations.php        adding and removing a plugin: items, search, per-item checks, real links
 ├── TestUrls.php          the pages to check
-├── Bundle/               database export, code, size estimate, step-by-step builder, Playground scripts
+├── Checks.php            the checkout and forms a person may rehearse (lists only)
+├── SmokeTest.php         Axle Smoke Test's key URLs and rules, guarded calls
+├── Bundle/               database export, Scrub.php (what the copy replaces), code, size estimate, step-by-step builder, Playground scripts (checks.php runs the checkout and forms in the copy)
 ├── Rehearsals.php        stored reports
 ├── Report.php            cleaning a report from the browser, the verdict filter
 ├── Rest/Controller.php   bundles and reports over REST
 ├── Admin/                Tools > Update Rehearsal, the Plugins screen note
-├── Abilities.php         list-rehearsals, get-rehearsal, plan-rehearsal, get-bundle-estimate
+├── Abilities.php         list-rehearsals, get-rehearsal, plan-rehearsal, list-checks, get-bundle-estimate
 ├── Cleanup.php           hourly clean-up
 ├── Privacy.php           export, erase, policy text
 ├── Health/SiteHealth.php Site Health test
@@ -159,7 +165,7 @@ Small plugins that each fill one gap in WordPress, all free with no pro version.
 | <img src="https://raw.githubusercontent.com/aryanjasala/axle-runtime-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Axle Runtime Doctor](https://github.com/aryanjasala/axle-runtime-doctor) | Check OPcache coverage, the object cache, PHP support and limits, cron and more, with the fix for your host |
 | <img src="https://raw.githubusercontent.com/aryanjasala/axle-smoke-test/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Axle Smoke Test](https://github.com/aryanjasala/axle-smoke-test) | Check key pages after every update or deploy, see what broke and roll it back |
 | <img src="https://raw.githubusercontent.com/aryanjasala/block-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Doctor](https://github.com/aryanjasala/block-doctor) | Scan the site for broken blocks and fix them in bulk, with undo. See which posts use each block before you switch a plugin off |
-| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, see the diff, reset them or send them to Git |
+| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, merge a theme update into them, reset them, send them to Git, move them to another site or lock them |
 | <img src="https://raw.githubusercontent.com/aryanjasala/role-right-sizer/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Role Right-Sizer](https://github.com/aryanjasala/role-right-sizer) | Recommends the smallest role each user needs, from what they actually do |
 | <img src="https://raw.githubusercontent.com/aryanjasala/user-session-manager/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [User Session Manager](https://github.com/aryanjasala/user-session-manager) | See every device signed in, sign out one, and limit sessions per role |
 

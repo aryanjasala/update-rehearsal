@@ -9,6 +9,7 @@ namespace AryanX\Axle\UpdateRehearsal\Health;
 
 use AryanX\Axle\UpdateRehearsal\Admin\Page;
 use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Checks;
 use AryanX\Axle\UpdateRehearsal\Limits;
 use AryanX\Axle\UpdateRehearsal\Service;
 
@@ -56,6 +57,12 @@ final class SiteHealth implements Service {
 				'label' => __( 'Update Rehearsal', 'update-rehearsal' ),
 				'test'  => array( $this, 'run' ),
 			);
+			if ( Checks::has_checkout() ) {
+				$tests['direct']['update_rehearsal_checkout'] = array(
+					'label' => __( 'Update Rehearsal checkout', 'update-rehearsal' ),
+					'test'  => array( $this, 'run_checkout' ),
+				);
+			}
 		}
 
 		return $tests;
@@ -93,6 +100,31 @@ final class SiteHealth implements Service {
 
 		/* translators: 1: estimated size, 2: limit. */
 		return $this->result( 'good', __( 'Updates can be rehearsed on a copy of this site', 'update-rehearsal' ), sprintf( __( 'A copy of this site is about %1$s once zipped, under the %2$s limit.', 'update-rehearsal' ), size_format( $estimate['total_bytes'], 1 ), size_format( $estimate['max_bytes'], 1 ) ), $action );
+	}
+
+	/**
+	 * Whether a checkout rehearsal would have something to order.
+	 *
+	 * @return array
+	 */
+	public function run_checkout(): array {
+		$products = function_exists( 'wc_get_products' ) ? wc_get_products(
+			array(
+				'status'       => 'publish',
+				'type'         => 'simple',
+				'stock_status' => 'instock',
+				'limit'        => 1,
+				'return'       => 'ids',
+			)
+		) : array();
+		if ( $products ) {
+			return $this->result( 'good', __( 'A checkout can be rehearsed on a copy of this site', 'update-rehearsal' ), __( 'The shop has an in-stock product the copy can order.', 'update-rehearsal' ), '' );
+		}
+
+		$result         = $this->result( 'recommended', __( 'A checkout rehearsal would have nothing to order', 'update-rehearsal' ), __( 'The shop has no published, in-stock simple product. Update Rehearsal orders one in the copy to check the checkout, so without one it skips that check.', 'update-rehearsal' ), '' );
+		$result['test'] = 'update_rehearsal_checkout';
+
+		return $result;
 	}
 
 	/**

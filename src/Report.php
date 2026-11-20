@@ -31,6 +31,17 @@ final class Report {
 		),
 	);
 
+	private const STEPS = array(
+		'list' => array(
+			'id'      => 'key',
+			'label'   => 'text',
+			'state'   => 'key',
+			'message' => 'long',
+			'ms'      => 'int',
+		),
+		'max'  => 20,
+	);
+
 	private const SIDE = array(
 		'status' => 'int',
 		'ms'     => 'int',
@@ -45,6 +56,7 @@ final class Report {
 		'status'   => 'key',
 		'kind'     => 'key',
 		'error'    => 'long',
+		'stopped'  => 'bool',
 		'verdict'  => 'key',
 		'reasons'  => array(
 			'list' => 'long',
@@ -90,6 +102,10 @@ final class Report {
 				'compare' => 'bool',
 				'verdict' => 'key',
 				'errors'  => 'int',
+				'rules'   => array(
+					'list' => 'long',
+					'max'  => 20,
+				),
 				'before'  => self::SIDE,
 				'after'   => self::SIDE,
 				'diff'    => array(
@@ -155,6 +171,20 @@ final class Report {
 				'list' => 'text',
 				'max'  => 50,
 			),
+		),
+		'checks'   => array(
+			'list' => array(
+				'id'      => 'text',
+				'kind'    => 'key',
+				'plugin'  => 'key',
+				'name'    => 'text',
+				'result'  => 'key',
+				'step'    => 'text',
+				'message' => 'long',
+				'before'  => self::STEPS,
+				'after'   => self::STEPS,
+			),
+			'max'  => 50,
 		),
 		'errors'   => array(
 			'list' => array(
@@ -279,6 +309,8 @@ final class Report {
 				return __( 'Amber', 'update-rehearsal' );
 			case 'red':
 				return __( 'Red', 'update-rehearsal' );
+			case 'stopped':
+				return __( 'Stopped', 'update-rehearsal' );
 			default:
 				return __( 'Failed', 'update-rehearsal' );
 		}
@@ -298,6 +330,8 @@ final class Report {
 				return __( 'amber', 'update-rehearsal' );
 			case 'red':
 				return __( 'red', 'update-rehearsal' );
+			case 'stopped':
+				return __( 'stopped', 'update-rehearsal' );
 			default:
 				return __( 'failed', 'update-rehearsal' );
 		}

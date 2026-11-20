@@ -2,7 +2,7 @@
 // Run on demand: npm run screenshots. Needs WordPress Playground (network).
 const { test, expect, wp, wpEval } = require( './utils' );
 const { prepareSite, shot } = require( './utils/media' );
-const { FIXTURE, NAME, installFixture, removeFixture, offer } = require( './fixtures' );
+const { FIXTURE, NAME, installFixture, removeFixture, offer, storeChecksReport } = require( './fixtures' );
 
 const PAGE = '/wp-admin/tools.php?page=update-rehearsal';
 const KEY = 'plugin:' + FIXTURE;
@@ -100,5 +100,15 @@ test.describe.serial( 'Screenshots', () => {
 		await expect( row.locator( '.urh-note' ) ).toContainText( /(just now|ago): green\./ );
 		await row.scrollIntoViewIfNeeded();
 		await shot( page, 6 );
+	} );
+
+	test( '7. a report with the checkout and a form, before and after', async ( { page, rest } ) => {
+		const stored = await storeChecksReport( rest, 'red' );
+		await page.goto( `${ PAGE }&rehearsal=${ stored.id }` );
+		await expect( page.locator( '.urh-check-report' ).first() ).toBeVisible();
+		await page.evaluate( () => document.querySelector( '.urh-verdict' ).scrollIntoView( { block: 'start' } ) );
+		await page.evaluate( () => window.scrollBy( 0, -60 ) );
+		await shot( page, 7 );
+		wpEval( `wp_delete_post( ${ stored.id }, true ); delete_option( 'update_rehearsal_latest' );` );
 	} );
 } );

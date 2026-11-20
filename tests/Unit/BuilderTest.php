@@ -243,7 +243,7 @@ final class BuilderTest extends PluginTestCase {
 		$this->assertTrue( $state['done'] );
 		$this->assertSame( 100, $state['percent'] );
 		$names = array_column( $state['files'], 'name' );
-		$this->assertSame( array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/operate.php', 'rehearsal/inspect.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json', 'part-001.zip', 'updates/plugin-shop-kit.zip' ), $names );
+		$this->assertSame( array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/operate.php', 'rehearsal/inspect.php', 'rehearsal/checks.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json', 'part-001.zip', 'updates/plugin-shop-kit.zip' ), $names );
 
 		$dir = Limits::work_dir() . $state['id'] . '/';
 		$zip = new \ZipArchive();

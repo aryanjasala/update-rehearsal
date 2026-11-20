@@ -108,7 +108,7 @@ final class Abilities implements Service {
 				'user'     => array( 'type' => 'string' ),
 				'verdict'  => array(
 					'type' => 'string',
-					'enum' => array( 'green', 'amber', 'red', 'failed' ),
+					'enum' => array( 'green', 'amber', 'red', 'failed', 'stopped' ),
 				),
 				'status'   => array( 'type' => 'string' ),
 				'kind'     => array(
@@ -136,7 +136,7 @@ final class Abilities implements Service {
 				'properties'           => array(
 					'verdict' => array(
 						'type' => 'string',
-						'enum' => array( '', 'green', 'amber', 'red', 'failed' ),
+						'enum' => array( '', 'green', 'amber', 'red', 'failed', 'stopped' ),
 					),
 					'kind'    => array(
 						'type'        => 'string',
@@ -225,6 +225,28 @@ final class Abilities implements Service {
 				),
 			),
 			array( $this, 'plan_rehearsal' ),
+			$can
+		);
+
+		$this->ability(
+			'list-checks',
+			__( 'List what a rehearsal can check', 'update-rehearsal' ),
+			__( 'The checkout and the forms this user may rehearse on the copy, and whether Axle Smoke Test\'s key URLs and rules are used. The copy places a test order and sends each form before and after the change, inside the browser, and never on this site. Running them needs a browser.', 'update-rehearsal' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'checkout'   => array( 'type' => 'object' ),
+					'forms'      => array( 'type' => 'array' ),
+					'smoke_test' => array( 'type' => 'boolean' ),
+				),
+			),
+			array( Checks::class, 'offer' ),
 			$can
 		);
 

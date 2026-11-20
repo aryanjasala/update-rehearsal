@@ -70,6 +70,9 @@ abstract class PluginTestCase extends TestCase {
 		$this->transients = array();
 		$this->cache      = array();
 
+		Functions\when( 'post_type_exists' )->justReturn( false );
+		Functions\when( 'rest_url' )->alias( static fn( $path = '' ) => 'https://example.test/wp-json/' . ltrim( (string) $path, '/' ) );
+		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce123' );
 		Functions\when( 'sanitize_key' )->alias(
 			static function ( $key ) {
 				return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );

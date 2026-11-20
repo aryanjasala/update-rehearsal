@@ -9,6 +9,7 @@ namespace AryanX\Axle\UpdateRehearsal\Cli;
 
 use AryanX\Axle\UpdateRehearsal\Bundle\Builder;
 use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
+use AryanX\Axle\UpdateRehearsal\Checks;
 use AryanX\Axle\UpdateRehearsal\Rehearsals;
 use AryanX\Axle\UpdateRehearsal\Settings;
 use AryanX\Axle\UpdateRehearsal\Updates;
@@ -321,12 +322,55 @@ final class Command {
 	}
 
 	/**
+	 * Lists the checkout and forms a rehearsal can try on the copy.
+	 *
+	 * The copy places the test order and sends each form in the browser, so this
+	 * only lists what is on offer. Nothing is submitted by this command.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--user=<user>]
+	 * : Whose capabilities decide what is listed. Needed to list forms.
+	 *
+	 * [--format=<format>]
+	 * : table, csv, json, yaml or count.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp update-rehearsal checks --user=admin
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Named arguments.
+	 */
+	public function checks( array $args, array $assoc_args ): void {
+		$rows = array();
+		if ( Checks::has_checkout() && Checks::can_checkout() ) {
+			$rows[] = array(
+				'key'    => 'checkout',
+				'name'   => 'Place a test order',
+				'plugin' => 'WooCommerce',
+			);
+		}
+		foreach ( Checks::forms() as $form ) {
+			$rows[] = array(
+				'key'    => $form['key'],
+				'name'   => $form['name'],
+				'plugin' => $form['plugin_name'],
+			);
+		}
+		\WP_CLI\Utils\format_items( (string) ( $assoc_args['format'] ?? 'table' ), $rows, array( 'key', 'name', 'plugin' ) );
+	}
+
+	/**
 	 * Lists past rehearsals, newest first.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--verdict=<verdict>]
-	 * : green, amber, red or failed.
+	 * : green, amber, red, failed or stopped.
 	 *
 	 * [--per-page=<n>]
 	 * : Rehearsals per page.

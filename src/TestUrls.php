@@ -77,6 +77,12 @@ class TestUrls {
 			$urls[] = $entry;
 		}
 
+		foreach ( SmokeTest::urls() as $key_url ) {
+			$entry          = self::entry( $key_url['path'], $key_url['label'] );
+			$entry['rules'] = $key_url['rules'];
+			$urls[]         = $entry;
+		}
+
 		/**
 		 * Filters the pages requested before and after the update.
 		 *
@@ -113,19 +119,48 @@ class TestUrls {
 			if ( '' === $as && $admin ) {
 				$as = 'administrator';
 			}
-			if ( isset( $clean[ $as . '|' . $path ] ) ) {
-				continue;
-			}
-			$clean[ $as . '|' . $path ] = array(
+			$entry = array(
 				'path'    => $path,
 				'label'   => sanitize_text_field( (string) ( $url['label'] ?? $path ) ),
 				'admin'   => $admin,
 				'as'      => $as,
 				'compare' => isset( $url['compare'] ) ? (bool) $url['compare'] : ! $admin,
 			);
+			if ( ! empty( $url['rules'] ) && is_array( $url['rules'] ) ) {
+				$entry['rules'] = array(
+					'must'     => self::rule_list( $url['rules']['must'] ?? array() ),
+					'must_not' => self::rule_list( $url['rules']['must_not'] ?? array() ),
+				);
+			}
+			// A page that is already listed keeps its place but takes the rules of a later entry.
+			if ( isset( $clean[ $as . '|' . $path ] ) ) {
+				if ( isset( $entry['rules'] ) && ! isset( $clean[ $as . '|' . $path ]['rules'] ) ) {
+					$clean[ $as . '|' . $path ]['rules'] = $entry['rules'];
+				}
+				continue;
+			}
+			$clean[ $as . '|' . $path ] = $entry;
 		}
 
 		return array_values( $clean );
+	}
+
+	/**
+	 * A list of rule lines, trimmed and capped.
+	 *
+	 * @param mixed $lines Rules.
+	 * @return string[]
+	 */
+	private static function rule_list( $lines ): array {
+		$out = array();
+		foreach ( array_slice( (array) $lines, 0, 50 ) as $rule ) {
+			$rule = substr( trim( sanitize_text_field( (string) $rule ) ), 0, 300 );
+			if ( '' !== $rule ) {
+				$out[] = $rule;
+			}
+		}
+
+		return $out;
 	}
 
 	/**

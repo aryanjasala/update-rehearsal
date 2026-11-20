@@ -13,6 +13,7 @@
  * - action updateRehearsal.stepFinished( step, context )
  * - action updateRehearsal.finished( report, context )
  * - action updateRehearsal.estimated( estimate )
+ * - filter updateRehearsal.lowMemory( small, context ): whether to show the low-memory note before Start
  * - filter updateRehearsal.inspect( reading, context ): what the copy holds before and after adding or removing a plugin
  */
 ( function () {
@@ -87,6 +88,7 @@
 		amber: () => __( 'Amber', 'update-rehearsal' ),
 		red: () => __( 'Red', 'update-rehearsal' ),
 		failed: () => __( 'Failed', 'update-rehearsal' ),
+		stopped: () => __( 'Stopped', 'update-rehearsal' ),
 	};
 
 	const SOURCE_WORDS = {
@@ -114,7 +116,7 @@
 	 */
 	function badge( verdict ) {
 		const key = VERDICT_WORDS[ verdict ] ? verdict : 'failed';
-		const tone = { green: 'good', amber: 'warning', red: 'error', failed: 'error' }[ key ];
+		const tone = { green: 'good', amber: 'warning', red: 'error', failed: 'error', stopped: 'warning' }[ key ];
 		return h( 'span', { className: 'axle-badge axle-badge--' + tone + ' urh-badge urh-' + key }, VERDICT_WORDS[ key ]() );
 	}
 
@@ -137,7 +139,11 @@
 			.map( ( url ) => {
 				const admin = url.admin !== undefined ? !! url.admin : url.path.indexOf( '/wp-admin' ) === 0;
 				const as = core.loginOf( { as: url.as, admin } );
-				return { path: url.path, label: url.label || url.path, admin, as, compare: url.compare !== undefined ? !! url.compare : ! admin };
+				const entry = { path: url.path, label: url.label || url.path, admin, as, compare: url.compare !== undefined ? !! url.compare : ! admin };
+				if ( url.rules && typeof url.rules === 'object' ) {
+					entry.rules = url.rules;
+				}
+				return entry;
 			} )
 			.filter( ( url ) => {
 				const id = url.as + '|' + url.path;
@@ -477,6 +483,7 @@
 		const copy = h( 'details', { className: 'urh-copy', open: true }, h( 'summary', null, __( 'The copy, running in your browser', 'update-rehearsal' ) ), frame );
 		panel.append(
 			h( 'h2', { className: 'axle-card__title' }, __( 'Rehearsal', 'update-rehearsal' ) ),
+			h( 'p', { className: 'description urh-keep-open-run' }, __( 'Keep this tab open until the report shows. Leaving the page stops the rehearsal.', 'update-rehearsal' ) ),
 			list,
 			bar,
 			status,
@@ -504,6 +511,324 @@
 			},
 		};
 	}
+
+	// ---------------------------------------------------------------------
+	// Checkout and forms, in the copy only.
+	// ---------------------------------------------------------------------
+
+	const CHECKS_ARGS = '/tmp/urh/checks.json';
+
+	/**
+	 * Runs the checks script in the copy with arguments.
+	 *
+	 * @param {Object} playground Client.
+	 * @param {Object} args       action and its arguments.
+	 * @return {Promise<Object>} What the script printed.
+	 */
+	async function checksPhp( playground, args ) {
+		await playground.writeFile( CHECKS_ARGS, JSON.stringify( args ) );
+		return runJson( playground, "<?php $urh_bundle = '" + BUNDLE + "'; $urh_args = json_decode( file_get_contents( '" + CHECKS_ARGS + "' ), true ); require '" + BUNDLE + "/rehearsal/checks.php';" );
+	}
+
+	/**
+	 * One response header, whatever case or shape the client gives it.
+	 *
+	 * @param {Object} response Response.
+	 * @param {string} name     Header name.
+	 * @return {string} Value.
+	 */
+	function headerOf( response, name ) {
+		const headers = ( response && response.headers ) || {};
+		const key = Object.keys( headers ).find( ( candidate ) => candidate.toLowerCase() === name.toLowerCase() );
+		const value = key ? headers[ key ] : '';
+		return String( Array.isArray( value ) ? value[ 0 ] : value || '' );
+	}
+
+	/**
+	 * A call to the WooCommerce Store API inside the copy, over the copy's own HTTP.
+	 *
+	 * @param {Object} playground Client.
+	 * @param {string} method     GET or POST.
+	 * @param {string} route      Route such as /wc/store/v1/cart.
+	 * @param {Object} body       JSON body, or null.
+	 * @param {Object} headers    Nonce and Cart-Token.
+	 * @return {Promise<{status: number, data: Object, response: Object}>} Answer.
+	 */
+	async function storeApi( playground, method, route, body, headers ) {
+		const request = { url: '/?rest_route=' + route, method, headers: Object.assign( { 'Content-Type': 'application/json' }, headers || {} ) };
+		if ( body ) {
+			request.body = JSON.stringify( body );
+		}
+		const response = await playground.request( request );
+		let data = {};
+		try {
+			data = JSON.parse( response.text );
+		} catch ( error ) {
+			data = {};
+		}
+		return { status: response.httpStatusCode, data: data && typeof data === 'object' ? data : {}, response };
+	}
+
+	/**
+	 * What went wrong in a Store API answer, in a few words.
+	 *
+	 * @param {{status: number, data: Object}} answer Answer.
+	 * @return {string} Message.
+	 */
+	function storeError( answer ) {
+		const data = answer.data || {};
+		const params = data.data && data.data.params ? Object.values( data.data.params ).join( ' ' ) : '';
+		return ( ( data.message || '' ) + ' ' + params ).trim() || sprintf( /* translators: %d: HTTP status. */ __( 'The copy answered with HTTP %d.', 'update-rehearsal' ), answer.status );
+	}
+
+	const step = ( id, label, state, message, started ) => ( { id, label, state, message: message || '', ms: started ? Math.round( performance.now() - started ) : 0 } );
+
+	/**
+	 * Places a test order in the copy: cart, order, the order in the shop, its emails.
+	 *
+	 * @param {Object} playground Client.
+	 * @param {number} productId  The product the first run used, or 0 to pick one.
+	 * @return {Promise<{steps: Object[], productId: number}>} Steps and the product used.
+	 */
+	async function checkoutSteps( playground, productId ) {
+		const labels = {
+			shop: __( 'The shop is ready in the copy', 'update-rehearsal' ),
+			cart: __( 'Add the product to the cart', 'update-rehearsal' ),
+			order: __( 'Place the order', 'update-rehearsal' ),
+			record: __( 'The order exists in the shop', 'update-rehearsal' ),
+			mail: __( 'The order emails are produced', 'update-rehearsal' ),
+		};
+		const steps = [];
+		const rest = ( from ) => {
+			const ids = Object.keys( labels );
+			ids.slice( ids.indexOf( from ) ).forEach( ( id ) => steps.push( step( id, labels[ id ], 'skipped', __( 'Not reached.', 'update-rehearsal' ) ) ) );
+		};
+		let started = performance.now();
+		let probe;
+		try {
+			probe = await checksPhp( playground, { action: 'probe', checkout: true } );
+		} catch ( error ) {
+			steps.push( step( 'shop', labels.shop, 'failed', error.message, started ) );
+			rest( 'cart' );
+			return { steps, productId };
+		}
+		const shop = probe.shop || {};
+		const id = productId || ( shop.product && shop.product.id ) || 0;
+		if ( ! shop.woocommerce ) {
+			steps.push( step( 'shop', labels.shop, 'failed', __( 'WooCommerce is not active in the copy.', 'update-rehearsal' ), started ) );
+			rest( 'cart' );
+			return { steps, productId };
+		}
+		if ( ! id ) {
+			steps.push( step( 'shop', labels.shop, 'skipped', __( 'The shop has no in-stock product with a price to order.', 'update-rehearsal' ), started ) );
+			rest( 'cart' );
+			return { steps, productId };
+		}
+		steps.push( step( 'shop', labels.shop, 'ok', shop.product ? shop.product.name : '', started ) );
+
+		await playground.request( { url: '/?urh_logout=1' } ).catch( () => null );
+		started = performance.now();
+		let headers;
+		try {
+			const cart = await storeApi( playground, 'GET', '/wc/store/v1/cart' );
+			if ( cart.status !== 200 ) {
+				throw new Error( storeError( cart ) );
+			}
+			headers = { Nonce: headerOf( cart.response, 'nonce' ), 'X-WC-Store-API-Nonce': headerOf( cart.response, 'nonce' ), 'Cart-Token': headerOf( cart.response, 'cart-token' ) };
+			const add = await storeApi( playground, 'POST', '/wc/store/v1/cart/add-item', { id, quantity: 1 }, headers );
+			if ( add.status !== 200 && add.status !== 201 ) {
+				throw new Error( storeError( add ) );
+			}
+			steps.push( step( 'cart', labels.cart, 'ok', '', started ) );
+		} catch ( error ) {
+			steps.push( step( 'cart', labels.cart, 'failed', error.message, started ) );
+			rest( 'order' );
+			return { steps, productId: id };
+		}
+
+		started = performance.now();
+		const base = shop.base || {};
+		const address = {
+			first_name: 'Rehearsal',
+			last_name: 'Customer',
+			company: '',
+			address_1: base.address || '1 Rehearsal Way',
+			address_2: '',
+			city: base.city || 'Rehearsal',
+			state: base.state || '',
+			postcode: base.postcode || '10001',
+			country: base.country || 'US',
+			phone: '5550100',
+		};
+		let orderId = 0;
+		try {
+			const placed = await storeApi(
+				playground,
+				'POST',
+				'/wc/store/v1/checkout',
+				{ billing_address: Object.assign( { email: 'rehearsal@example.invalid' }, address ), shipping_address: address, customer_note: 'Update Rehearsal test order', payment_method: 'cheque', payment_data: [], create_account: false },
+				headers
+			);
+			orderId = Number( placed.data.order_id || 0 );
+			if ( placed.status !== 200 || ! orderId || ( placed.data.payment_result && placed.data.payment_result.payment_status === 'failure' ) ) {
+				throw new Error( storeError( placed ) );
+			}
+			steps.push( step( 'order', labels.order, 'ok', sprintf( /* translators: %d: order number. */ __( 'Order %d', 'update-rehearsal' ), orderId ), started ) );
+		} catch ( error ) {
+			steps.push( step( 'order', labels.order, 'failed', error.message, started ) );
+			rest( 'record' );
+			return { steps, productId: id };
+		}
+
+		started = performance.now();
+		try {
+			const read = await checksPhp( playground, { action: 'order', order_id: orderId, mail_from: probe.mail || 0 } );
+			if ( read.exists ) {
+				steps.push( step( 'record', labels.record, 'ok', sprintf( /* translators: 1: order status, 2: number of items. */ __( 'Status %1$s, %2$d item(s)', 'update-rehearsal' ), read.status, read.items ), started ) );
+			} else {
+				steps.push( step( 'record', labels.record, 'failed', __( 'The order the checkout reported is not in the shop.', 'update-rehearsal' ), started ) );
+			}
+			const subjects = read.mail || [];
+			steps.push( subjects.length ? step( 'mail', labels.mail, 'ok', subjects.join( '; ' ), started ) : step( 'mail', labels.mail, 'failed', __( 'No email was produced for the order.', 'update-rehearsal' ), started ) );
+		} catch ( error ) {
+			steps.push( step( 'record', labels.record, 'failed', error.message, started ) );
+			rest( 'mail' );
+		}
+		return { steps, productId: id };
+	}
+
+	/**
+	 * Sends a form in the copy and checks the entry and the email.
+	 *
+	 * @param {Object} playground Client.
+	 * @param {string} key        Form key such as cf7:12.
+	 * @return {Promise<Object[]>} Steps.
+	 */
+	async function formSteps( playground, key ) {
+		const labels = {
+			send: __( 'Send the form', 'update-rehearsal' ),
+			entry: __( 'The entry is saved', 'update-rehearsal' ),
+			mail: __( 'The email is produced', 'update-rehearsal' ),
+		};
+		const notReached = ( from ) => [ 'send', 'entry', 'mail' ].slice( [ 'send', 'entry', 'mail' ].indexOf( from ) ).map( ( id ) => step( id, labels[ id ], 'skipped', __( 'Not reached.', 'update-rehearsal' ) ) );
+		const started = performance.now();
+		let result;
+		try {
+			const mail = await checksPhp( playground, { action: 'mail' } );
+			result = await checksPhp( playground, { action: 'form', key, mail_from: mail.count || 0 } );
+		} catch ( error ) {
+			return [ step( 'send', labels.send, 'failed', error.message, started ) ].concat( notReached( 'entry' ) );
+		}
+		if ( ! result.ok ) {
+			return [ step( 'send', labels.send, 'failed', result.error || __( 'The copy could not send the form.', 'update-rehearsal' ), started ) ].concat( notReached( 'entry' ) );
+		}
+		if ( ( result.unfilled || [] ).length ) {
+			return [ step( 'send', labels.send, 'skipped', sprintf( /* translators: %s: field names. */ __( 'A person has to fill these required fields, so the copy could not send the form: %s', 'update-rehearsal' ), result.unfilled.join( ', ' ) ), started ) ].concat( notReached( 'entry' ) );
+		}
+		if ( result.status === 'spam' ) {
+			return [ step( 'send', labels.send, 'skipped', __( 'The form\'s spam protection turned the test submission away. It cannot run in the copy, which makes no outgoing requests.', 'update-rehearsal' ) + ( ( result.spam_reasons || [] ).length ? ' ' + result.spam_reasons.join( ' ' ) : '' ), started ) ].concat( notReached( 'entry' ) );
+		}
+		if ( ! result.sent ) {
+			const invalid = ( result.invalid || [] ).length ? ' ' + sprintf( /* translators: %s: field names. */ __( 'Fields refused: %s', 'update-rehearsal' ), result.invalid.join( ', ' ) ) : '';
+			return [ step( 'send', labels.send, 'failed', ( result.message || __( 'The form did not accept the test entry.', 'update-rehearsal' ) ) + invalid, started ) ].concat( notReached( 'entry' ) );
+		}
+		const steps = [ step( 'send', labels.send, 'ok', result.message || '', started ) ];
+		if ( result.entry === null || result.entry === undefined ) {
+			steps.push( step( 'entry', labels.entry, 'skipped', ( result.notes || [] ).join( ' ' ) || __( 'This form plugin keeps no entries.', 'update-rehearsal' ) ) );
+		} else {
+			steps.push( result.entry ? step( 'entry', labels.entry, 'ok', '' ) : step( 'entry', labels.entry, 'failed', __( 'The form said it was sent, but no entry was saved.', 'update-rehearsal' ) ) );
+		}
+		const subjects = result.mail || [];
+		if ( result.notifications === 0 ) {
+			steps.push( step( 'mail', labels.mail, 'skipped', __( 'No notification is set up for this form.', 'update-rehearsal' ) ) );
+		} else {
+			steps.push( subjects.length ? step( 'mail', labels.mail, 'ok', subjects.join( '; ' ) ) : step( 'mail', labels.mail, 'failed', __( 'The form was sent but no email was produced.', 'update-rehearsal' ) ) );
+		}
+		return steps;
+	}
+
+	/**
+	 * Runs the chosen checks once, before or after the change.
+	 *
+	 * @param {Object}   playground Client.
+	 * @param {Object}   plan       checkout (bool) and forms (keys).
+	 * @param {Object}   manifest   Manifest.
+	 * @param {number}   productId  Product from the first run, or 0.
+	 * @param {Function} onStatus   Called with a sentence.
+	 * @return {Promise<{checks: Object[], errors: Object[], productId: number}>} Checks, new log lines, product.
+	 */
+	async function runChecks( playground, plan, manifest, productId, onStatus ) {
+		await playground.writeFile( LOG, '' );
+		const checks = [];
+		let product = productId;
+		if ( plan.checkout ) {
+			onStatus( __( 'Placing a test order in the copy', 'update-rehearsal' ) );
+			const done = await checkoutSteps( playground, productId );
+			product = done.productId;
+			checks.push( { id: 'checkout', kind: 'checkout', plugin: 'woocommerce', name: __( 'Place a test order', 'update-rehearsal' ), steps: done.steps } );
+		}
+		for ( const key of plan.forms || [] ) {
+			const form = ( ( config.checks && config.checks.forms ) || [] ).find( ( candidate ) => candidate.key === key ) || { name: key, plugin: key.split( ':' )[ 0 ] };
+			onStatus( sprintf( /* translators: %s: form name. */ __( 'Sending the form "%s" in the copy', 'update-rehearsal' ), form.name ) );
+			checks.push( { id: key, kind: 'form', plugin: form.plugin, name: form.name, steps: await formSteps( playground, key ) } );
+		}
+		const log = await playground.readFileAsText( LOG ).catch( () => '' );
+		return { checks, errors: core.errorsFromLog( log, manifest, config.ignoredErrors ), productId: product };
+	}
+
+	/**
+	 * Whether a CSS selector from a Smoke Test rule matches in a page.
+	 *
+	 * @param {string} html     Page HTML.
+	 * @param {string} selector Selector.
+	 * @return {boolean|null} Match, or null when the selector cannot be read.
+	 */
+	function selectorMatches( html, selector ) {
+		try {
+			return new window.DOMParser().parseFromString( html, 'text/html' ).querySelector( selector ) !== null;
+		} catch ( error ) {
+			return null;
+		}
+	}
+
+	// A rehearsal in progress, so leaving the page can warn and record it.
+	let running = null;
+
+	window.addEventListener( 'beforeunload', ( event ) => {
+		if ( running ) {
+			event.preventDefault();
+			event.returnValue = '';
+			// If the person leaves, the page's own requests fail next. Those failures are not a rehearsal that failed.
+			running.unloading = true;
+			clearTimeout( running.timer );
+			running.timer = setTimeout( () => {
+				if ( running ) {
+					running.unloading = false;
+				}
+			}, 3000 );
+		}
+	} );
+
+	/**
+	 * Tells the site the rehearsal was stopped, so History shows "Stopped: you left the page" instead of nothing.
+	 *
+	 * @return {boolean} Whether a report was sent.
+	 */
+	function sendStopped() {
+		if ( ! running || running.sent || ! config.beaconUrl || ! navigator.sendBeacon ) {
+			return false;
+		}
+		running.sent = true;
+		const stopped = Object.assign( {}, running.report, { status: 'failed', stopped: true, error: __( 'Stopped: you left the page.', 'update-rehearsal' ), finished: new Date().toISOString() } );
+		try {
+			navigator.sendBeacon( config.beaconUrl, new Blob( [ JSON.stringify( { report: stopped } ) ], { type: 'application/json' } ) );
+		} catch ( error ) {
+			running.sent = false;
+		}
+		return running.sent;
+	}
+
+	window.addEventListener( 'pagehide', sendStopped );
 
 	/**
 	 * Measures the new front-end files of a page in the copy.
@@ -577,7 +902,12 @@
 			wp: { from: config.site.wp, to: ( items.find( ( item ) => item.type === 'core' ) || {} ).to || config.site.wp },
 			started: started.toISOString(),
 		};
-		const finishStep = ( step ) => hooks().doAction( 'updateRehearsal.stepFinished', step, context );
+		const finishStep = ( stepName ) => hooks().doAction( 'updateRehearsal.stepFinished', stepName, context );
+		const plan = selection.checks || { checkout: false, forms: [] };
+		const wantChecks = !! plan.checkout || ( plan.forms || [] ).length > 0;
+		let checksBefore = null;
+		let checksAfter = null;
+		running = { report, sent: false };
 		let bundleId = '';
 		let current = 'bundle';
 
@@ -626,6 +956,9 @@
 			ui.set( 'before', 'active' );
 			const before = await requestPages( client, copy, urls, manifest, ( url ) => ui.status( url.path ) );
 			const readingBefore = kind === 'update' ? null : await inspect( client, { paths: contentPaths }, Object.assign( { phase: 'before' }, context ) );
+			if ( wantChecks ) {
+				checksBefore = await runChecks( client, plan, manifest, 0, ui.status );
+			}
 			ui.set( 'before', 'done', sprintf( /* translators: %d: number of pages. */ __( '%d pages', 'update-rehearsal' ), urls.length ) );
 			finishStep( 'before' );
 
@@ -714,6 +1047,9 @@
 			ui.set( 'after', 'active' );
 			const after = await requestPages( client, copy, urls, manifest, ( url ) => ui.status( url.path ) );
 			const readingAfter = kind === 'update' ? null : await inspect( client, { paths: contentPaths, before: readingBefore }, Object.assign( { phase: 'after' }, context ) );
+			if ( wantChecks ) {
+				checksAfter = await runChecks( client, plan, manifest, checksBefore.productId, ui.status );
+			}
 			ui.set( 'after', 'done' );
 			finishStep( 'after' );
 
@@ -746,9 +1082,48 @@
 				removalReasons = core.removalReasons( report.removed );
 			}
 
+			// Errors the copy logged while it placed the order and sent the forms count like errors on a page.
+			if ( wantChecks && ( checksBefore.errors.length || checksAfter.errors.length ) ) {
+				results.push(
+					core.compareUrl(
+						{ path: '(checkout and forms)', label: __( 'Checkout and forms', 'update-rehearsal' ), admin: false, as: '', compare: false },
+						{ status: 200, ms: 0, html: '', errors: checksBefore.errors },
+						{ status: 200, ms: 0, html: '', errors: checksAfter.errors },
+						{ siteUrls: urlsSeen, rules: config.normaliseRules }
+					)
+				);
+			}
+
+			// Axle Smoke Test's must-contain rules on the pages it checks: only what is new after the change counts.
+			const ruleReasons = [];
+			urls.forEach( ( url, index ) => {
+				const rules = url.rules;
+				if ( ! rules || ! ( ( rules.must || [] ).length || ( rules.must_not || [] ).length ) || after[ index ].status === 0 || after[ index ].status >= 400 ) {
+					return;
+				}
+				const fresh = core.newRuleFindings( core.ruleFindings( before[ index ].html, rules, selectorMatches ), core.ruleFindings( after[ index ].html, rules, selectorMatches ) );
+				if ( fresh.length ) {
+					results[ index ].rules = fresh;
+					fresh.forEach( ( text ) => ruleReasons.push( { code: 'rule', name: text, paths: [ url.path ] } ) );
+				}
+			} );
+
+			// The checkout and the forms, before against after.
+			report.checks = wantChecks
+				? checksBefore.checks.map( ( first ) => {
+						const second = checksAfter.checks.find( ( candidate ) => candidate.id === first.id ) || { steps: [] };
+						return Object.assign( {}, first, { before: first.steps, after: second.steps }, core.judgeCheck( first.steps, second.steps ), { steps: undefined } );
+				  } )
+				: [];
+			const checkReasons = core.checkReasons( report.checks );
+
 			const errors = core.collectErrors( results );
-			report.verdict = core.withRemovalReasons( core.verdict( results ), removalReasons );
-			report.reasons = core.summariseReasons( results ).map( reasonText ).concat( removalReasons.map( reasonText ) );
+			report.verdict = core.withCheckReasons( core.withRemovalReasons( core.verdict( results ), removalReasons.concat( ruleReasons ) ), checkReasons );
+			report.reasons = checkReasons
+				.map( reasonText )
+				.concat( core.summariseReasons( results ).map( reasonText ) )
+				.concat( removalReasons.map( reasonText ) )
+				.concat( ruleReasons.map( reasonText ) );
 			report.urls = results.map( ( result ) => {
 				const out = Object.assign( {}, result );
 				delete out.newErrors;
@@ -760,6 +1135,7 @@
 			report.finished = new Date().toISOString();
 			report.duration = Date.now() - started.getTime();
 
+			running = null;
 			const saved = await rest( '/rehearsals', { method: 'POST', data: { report } } );
 			ui.set( 'compare', 'done' );
 			finishStep( 'compare' );
@@ -776,6 +1152,14 @@
 			hooks().doAction( 'updateRehearsal.finished', saved.report, context );
 			return saved;
 		} catch ( error ) {
+			// The page is going away and already told the site it was stopped: a second, "failed" record would only confuse History.
+			const leaving = running && ( running.sent || running.unloading );
+			if ( leaving ) {
+				sendStopped();
+				running = null;
+				return report;
+			}
+			running = null;
 			ui.set( current, 'failed' );
 			ui.status( '' );
 			if ( bundleId ) {
@@ -855,6 +1239,15 @@
 			case 'missing_screen':
 				/* translators: %s: admin screen name. */
 				return sprintf( __( 'The admin screen "%s" is gone.', 'update-rehearsal' ), reason.name );
+			case 'rule':
+				/* translators: 1: page, 2: what the Axle Smoke Test rule found. */
+				return sprintf( __( 'Smoke Test rule on %1$s: %2$s', 'update-rehearsal' ), pages, reason.name );
+			case 'check_broke':
+				/* translators: 1: check name, 2: step, 3: reason. */
+				return sprintf( __( '%1$s broke at "%2$s" after the change: %3$s', 'update-rehearsal' ), reason.name, reason.step, reason.message );
+			case 'check_failed_both':
+				/* translators: 1: check name, 2: step, 3: reason. */
+				return sprintf( __( '%1$s did not work before the change either (at "%2$s"): %3$s', 'update-rehearsal' ), reason.name, reason.step, reason.message );
 			default:
 				/* translators: 1: Warning, Notice, Deprecated or Database error, 2: plugin or theme name, 3: pages, 4: error message. */
 				return sprintf( __( '%1$s from %2$s on %3$s: %4$s', 'update-rehearsal' ), ( LEVEL_WORDS[ reason.code ] || LEVEL_WORDS.warning )(), name, pages, reason.message );
@@ -894,7 +1287,7 @@
 				red: __( 'Do not remove it yet: something broke in the copy.', 'update-rehearsal' ),
 			},
 		};
-		const headline = verdict === 'failed' || ! VERDICT_WORDS[ verdict ] ? __( 'The rehearsal could not finish.', 'update-rehearsal' ) : ( headlines[ headlines[ kind ] ? kind : 'update' ] )[ verdict ];
+		const headline = verdict === 'stopped' ? __( 'The rehearsal stopped: you left the page before it finished. The copy lived in that page, so nothing was kept.', 'update-rehearsal' ) : verdict === 'failed' || ! VERDICT_WORDS[ verdict ] ? __( 'The rehearsal could not finish.', 'update-rehearsal' ) : ( headlines[ headlines[ kind ] ? kind : 'update' ] )[ verdict ];
 
 		const body = h( 'div', { className: 'urh-report-body' } );
 		const parts = [
@@ -906,6 +1299,7 @@
 			actions( stored, report, body ),
 			sourcesTable( report ),
 			errorsList( report ),
+			checksCard( report ),
 			addedCard( report ),
 			removedCard( report ),
 			pagesTable( report, previews ),
@@ -914,6 +1308,82 @@
 		body.append( ...parts.filter( Boolean ) );
 		container.textContent = '';
 		container.append( body );
+	}
+
+	/**
+	 * The checkout and the forms, each before and after the change, step by step.
+	 *
+	 * @param {Object} report Report.
+	 * @return {HTMLElement|null} Card, or null when nothing was rehearsed.
+	 */
+	function checksCard( report ) {
+		const checks = report.checks || [];
+		if ( ! checks.length || report.status === 'failed' ) {
+			return null;
+		}
+		const words = {
+			ok: () => __( 'Worked', 'update-rehearsal' ),
+			failed: () => __( 'Failed', 'update-rehearsal' ),
+			skipped: () => __( 'Not run', 'update-rehearsal' ),
+		};
+		const tones = { ok: 'good', failed: 'error', skipped: 'neutral' };
+		const cell = ( item ) =>
+			item
+				? h( 'td', null, h( 'span', { className: 'axle-badge axle-badge--' + ( tones[ item.state ] || 'neutral' ) + ' urh-state urh-state-' + item.state }, ( words[ item.state ] || words.skipped )() ), item.message ? h( 'div', { className: 'urh-muted urh-step-message' }, item.message ) : null )
+				: h( 'td', null, '-' );
+		const sentence = ( check ) => {
+			switch ( check.result ) {
+				case 'broke':
+					/* translators: 1: step, 2: reason. */
+					return sprintf( __( 'It broke at "%1$s" after the change. %2$s', 'update-rehearsal' ), check.step, check.message );
+				case 'failed_both':
+					/* translators: 1: step, 2: reason. */
+					return sprintf( __( 'It did not work before the change either, at "%1$s". %2$s', 'update-rehearsal' ), check.step, check.message );
+				case 'skipped':
+					return __( 'It could not be rehearsed on this site. See the steps for why.', 'update-rehearsal' );
+				default:
+					return __( 'It worked before and after the change.', 'update-rehearsal' );
+			}
+		};
+		const tone = { ok: 'good', broke: 'error', failed_both: 'warning', skipped: 'neutral' };
+		const name = { ok: () => __( 'Worked', 'update-rehearsal' ), broke: () => __( 'Broke', 'update-rehearsal' ), failed_both: () => __( 'Never worked', 'update-rehearsal' ), skipped: () => __( 'Not run', 'update-rehearsal' ) };
+		return h(
+			'div',
+			{ className: 'axle-card urh-checks-report' },
+			h( 'h3', { className: 'axle-card__title' }, __( 'Checkout and forms', 'update-rehearsal' ) ),
+			h( 'p', { className: 'description' }, __( 'Each one ran inside the copy, before and after the change. No order and no entry was made on this site.', 'update-rehearsal' ) ),
+			checks.map( ( check ) => {
+				const ids = [];
+				( check.before || [] ).concat( check.after || [] ).forEach( ( item ) => {
+					if ( ids.indexOf( item.id ) === -1 ) {
+						ids.push( item.id );
+					}
+				} );
+				return h(
+					'section',
+					{ className: 'urh-check-report', 'data-check': check.id, 'data-result': check.result },
+					h( 'h4', null, check.name, ' ', h( 'span', { className: 'axle-badge axle-badge--' + ( tone[ check.result ] || 'neutral' ) }, ( name[ check.result ] || name.skipped )() ) ),
+					h( 'p', null, sentence( check ) ),
+					scrollable(
+						sprintf( /* translators: %s: check name. */ __( 'Steps of %s, before and after', 'update-rehearsal' ), check.name ),
+						h(
+							'table',
+							{ className: 'widefat striped urh-steps-table' },
+							h( 'thead', null, h( 'tr', null, [ __( 'Step', 'update-rehearsal' ), __( 'Before', 'update-rehearsal' ), __( 'After', 'update-rehearsal' ) ].map( ( label ) => h( 'th', { scope: 'col' }, label ) ) ) ),
+							h(
+								'tbody',
+								null,
+								ids.map( ( id ) => {
+									const was = ( check.before || [] ).find( ( item ) => item.id === id );
+									const now = ( check.after || [] ).find( ( item ) => item.id === id );
+									return h( 'tr', { 'data-step': id }, h( 'th', { scope: 'row' }, ( now || was ).label ), cell( was ), cell( now ) );
+								} )
+							)
+						)
+					)
+				);
+			} )
+		);
 	}
 
 	/**
@@ -984,6 +1454,7 @@
 	 */
 	function actions( stored, report, body ) {
 		const links = [];
+		const others = [];
 		const holder = h( 'div', { className: 'urh-confirm-holder' } );
 		const reals = stored.links || {};
 		( report.items || [] ).forEach( ( item ) => {
@@ -1001,7 +1472,8 @@
 			if ( ! href || report.status === 'failed' ) {
 				return;
 			}
-			const link = h( 'a', { className: 'button' + ( stored.verdict === 'green' && item.type !== 'delete' ? ' button-primary' : '' ) + ' urh-update-real', href }, label );
+			// On red it is a plain link: the report says do not, and it still asks first.
+			const link = h( 'a', { className: stored.verdict === 'red' ? 'urh-update-real urh-update-real--plain' : 'button' + ( stored.verdict === 'green' && item.type !== 'delete' ? ' button-primary' : '' ) + ' urh-update-real', href }, label );
 			link.addEventListener( 'click', ( event ) => {
 				let ask = core.updateConfirm( stored.verdict, report.reasons );
 				// Deleting a plugin cannot be undone, whatever the verdict says.
@@ -1017,17 +1489,28 @@
 			links.push( link );
 		} );
 		const name = 'update-rehearsal-' + ( stored.id || 'report' );
-		links.push(
-			h( 'button', { type: 'button', className: 'button urh-download-json', onClick: () => download( name + '.json', 'application/json', JSON.stringify( stored, null, 2 ) ) }, __( 'Download report (JSON)', 'update-rehearsal' ) ),
-			h( 'button', { type: 'button', className: 'button urh-download-html', onClick: () => download( name + '.html', 'text/html', standalone( stored, body ) ) }, __( 'Download report (HTML)', 'update-rehearsal' ) )
+		// One control for both formats: a button that opens a short list.
+		others.push(
+			h(
+				'details',
+				{ className: 'urh-download' },
+				h( 'summary', { className: 'button urh-download-toggle' }, __( 'Download report', 'update-rehearsal' ) ),
+				h(
+					'div',
+					{ className: 'urh-download-menu' },
+					h( 'button', { type: 'button', className: 'button-link urh-download-html', onClick: () => download( name + '.html', 'text/html', standalone( stored, body ) ) }, __( 'As a web page (HTML), to read', 'update-rehearsal' ) ),
+					h( 'button', { type: 'button', className: 'button-link urh-download-json', onClick: () => download( name + '.json', 'application/json', JSON.stringify( stored, null, 2 ) ) }, __( 'As data (JSON), for tools', 'update-rehearsal' ) )
+				)
+			)
 		);
 		if ( report.php && report.php.to !== report.php.from && report.status !== 'failed' ) {
-			links.push( h( 'span', { className: 'description' }, __( 'Your host changes the PHP version, usually from its control panel.', 'update-rehearsal' ) ) );
+			others.push( h( 'span', { className: 'description' }, __( 'Your host changes the PHP version, usually from its control panel.', 'update-rehearsal' ) ) );
 		}
-		if ( stored.id && report.status !== 'failed' ) {
-			links.push( h( 'a', { className: 'button urh-rerun', href: config.pageUrl + ( config.pageUrl.indexOf( '?' ) === -1 ? '?' : '&' ) + 'rerun=' + stored.id }, __( 'Run again', 'update-rehearsal' ) ) );
+		if ( stored.id && ( report.status !== 'failed' || report.stopped ) ) {
+			others.push( h( 'a', { className: 'button urh-rerun', href: config.pageUrl + ( config.pageUrl.indexOf( '?' ) === -1 ? '?' : '&' ) + 'rerun=' + stored.id }, __( 'Run again', 'update-rehearsal' ) ) );
 		}
-		return h( 'div', null, h( 'p', { className: 'urh-actions' }, links ), holder );
+		const all = stored.verdict === 'red' ? others.concat( links ) : links.concat( others );
+		return h( 'div', null, h( 'p', { className: 'urh-actions' }, all ), holder );
 	}
 
 	/**
@@ -1330,7 +1813,13 @@
 								h( 'td', null, h( 'code', null, url.path ), ' ', role, h( 'br' ), h( 'span', { className: 'urh-muted' }, url.label ) ),
 								h( 'td', null, response( url ) ),
 								h( 'td', null, url.errors ),
-								h( 'td', null, changes( diff, url ), preview ? compareButton( url, preview ) : null ),
+								h(
+									'td',
+									null,
+									changes( diff, url ),
+									( url.rules || [] ).length ? h( 'div', { className: 'urh-rules' }, h( 'strong', null, __( 'Smoke Test rules broken', 'update-rehearsal' ) ), h( 'ul', null, url.rules.map( ( rule ) => h( 'li', null, rule ) ) ) ) : null,
+									preview ? compareButton( url, preview ) : null
+								),
 								h( 'td', null, badge( url.verdict ) )
 							);
 						} )
@@ -1540,15 +2029,32 @@
 	}
 
 	/**
+	 * The checkout and forms that are ticked.
+	 *
+	 * @return {{checkout: boolean, forms: string[]}} Checks.
+	 */
+	function pickedChecks() {
+		const checks = { checkout: false, forms: [] };
+		document.querySelectorAll( '.urh-check:checked' ).forEach( ( input ) => {
+			if ( input.value === 'checkout' ) {
+				checks.checkout = true;
+			} else {
+				checks.forms.push( input.value );
+			}
+		} );
+		return checks;
+	}
+
+	/**
 	 * What is ticked on the screen.
 	 *
-	 * @return {{kind: string, items: string[], php: string, chosen: Object[], uploads: Object[]}} Selection.
+	 * @return {{kind: string, items: string[], php: string, chosen: Object[], uploads: Object[], checks: Object}} Selection.
 	 */
 	function selection() {
 		const kind = currentKind();
 		const php = document.getElementById( 'urh-php' );
 		if ( kind === 'add' ) {
-			return { kind, items: chosen.map( ( item ) => item.key ), php: '', chosen: chosen.slice(), uploads: uploads.slice() };
+			return { kind, items: chosen.map( ( item ) => item.key ), php: '', chosen: chosen.slice(), uploads: uploads.slice(), checks: pickedChecks() };
 		}
 		if ( kind === 'remove' ) {
 			const mode = document.querySelector( 'input[name="urh_remove_mode"]:checked' );
@@ -1562,10 +2068,10 @@
 				from: ( ( config.plugins || [] ).find( ( plugin ) => plugin.file === input.value ) || {} ).version || '',
 				to: '',
 			} ) );
-			return { kind, items: picked.map( ( item ) => item.key ), php: '', chosen: picked, uploads: [] };
+			return { kind, items: picked.map( ( item ) => item.key ), php: '', chosen: picked, uploads: [], checks: pickedChecks() };
 		}
 		const items = Array.from( document.querySelectorAll( 'input[name="urh_items[]"]:checked' ) ).map( ( input ) => input.value );
-		return { kind: 'update', items, php: php ? php.value : '', chosen: [], uploads: [] };
+		return { kind: 'update', items, php: php ? php.value : '', chosen: [], uploads: [], checks: pickedChecks() };
 	}
 
 	/**
@@ -1953,6 +2459,14 @@
 		// A link from the Plugins screen or "Run again" asked for a plugin to add.
 		const pick = config.preselect || {};
 		( pick.plugins || [] ).forEach( ( slug ) => search( slug, true ) );
+
+		// The copy lives in this tab's memory: say so before Start on a phone or a small device.
+		const memory = Number( navigator.deviceMemory || 0 );
+		const small = ( memory > 0 && memory <= 4 ) || ( window.matchMedia && window.matchMedia( '(max-width: 782px)' ).matches ) || ( navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 2 );
+		const note = document.getElementById( 'urh-memory-note' );
+		if ( note && hooks().applyFilters( 'updateRehearsal.lowMemory', small, { memory } ) ) {
+			note.hidden = false;
+		}
 
 		showKind();
 		const sizeBox = document.querySelector( '.urh-estimate' );

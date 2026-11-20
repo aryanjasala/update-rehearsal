@@ -241,7 +241,20 @@ add_filter(
 		return $dirs;
 	}
 );
-add_filter( 'pre_wp_mail', '__return_true' );
+// The copy sends nothing. It writes each message it would have sent (recipients and subject, never the body) to a file the checkout and form checks read.
+add_filter(
+	'pre_wp_mail',
+	function ( $short_circuit, $atts ) {
+		$to = isset( $atts['to'] ) ? ( is_array( $atts['to'] ) ? implode( ', ', $atts['to'] ) : (string) $atts['to'] ) : '';
+		if ( ! is_dir( '/tmp/urh' ) ) {
+			@mkdir( '/tmp/urh', 0777, true );
+		}
+		@file_put_contents( '/tmp/urh/mail.jsonl', json_encode( array( 'to' => $to, 'subject' => isset( $atts['subject'] ) ? (string) $atts['subject'] : '' ) ) . "\n", FILE_APPEND );
+		return true;
+	},
+	10,
+	2
+);
 add_filter( 'pre_get_ready_cron_jobs', '__return_empty_array' );
 add_filter( 'automatic_updater_disabled', '__return_true' );
 add_filter(
@@ -581,6 +594,341 @@ if ( $urh_before ) {
 
 ob_end_clean();
 echo json_encode( $urh_out );
+PHP;
+	}
+
+	/**
+	 * Rehearses a checkout and forms inside the copy. Runs inside Playground only.
+	 *
+	 * The browser drives the Store API with HTTP requests to the copy. This
+	 * script prepares the copy (an offline gateway, a product), submits forms
+	 * through each plugin's own code, and reads back orders, entries and mail.
+	 * Reads $urh_args: action (probe, order, form, mail), and the action's own
+	 * arguments. Prints one line of JSON last.
+	 *
+	 * @return string PHP source.
+	 */
+	public static function checks(): string {
+		return <<<'PHP'
+<?php
+/**
+ * Update Rehearsal: checkout and form checks in this copy. Runs inside Playground only.
+ * Nothing here exists on the live site.
+ */
+ob_start();
+$urh_bundle = isset( $urh_bundle ) ? rtrim( $urh_bundle, '/' ) : dirname( __DIR__ );
+$urh_args   = isset( $urh_args ) && is_array( $urh_args ) ? $urh_args : array();
+$urh_root   = isset( $urh_args['docroot'] ) ? rtrim( $urh_args['docroot'], '/' ) : '/wordpress';
+require $urh_root . '/wp-load.php';
+
+$urh_mail = function () {
+	$lines = is_readable( '/tmp/urh/mail.jsonl' ) ? file( '/tmp/urh/mail.jsonl', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES ) : array();
+	$out   = array();
+	foreach ( (array) $lines as $line ) {
+		$row = json_decode( $line, true );
+		if ( is_array( $row ) ) {
+			$out[] = $row;
+		}
+	}
+	return $out;
+};
+$urh_mail_since = function ( $from ) use ( $urh_mail ) {
+	$subjects = array();
+	foreach ( array_slice( $urh_mail(), (int) $from ) as $row ) {
+		$subjects[] = (string) $row['subject'];
+	}
+	return $subjects;
+};
+
+// A value for a form field of a known simple type, or null when a person has to choose.
+$urh_value = function ( $type, $name, $first_choice, $min ) {
+	$name = strtolower( (string) $name );
+	switch ( $type ) {
+		case 'email':
+			return 'rehearsal@example.invalid';
+		case 'tel':
+		case 'phone':
+			return '5550100';
+		case 'url':
+		case 'website':
+			return 'https://example.invalid';
+		case 'number':
+		case 'range':
+			return null !== $min && '' !== $min ? (string) $min : '1';
+		case 'date':
+			return gmdate( 'Y-m-d' );
+		case 'textarea':
+			return 'Rehearsal message from Update Rehearsal. Nothing was sent.';
+		case 'select':
+		case 'radio':
+		case 'multiselect':
+		case 'checkbox':
+			return $first_choice;
+		case 'acceptance':
+		case 'consent':
+			return '1';
+		case 'text':
+			return false !== strpos( $name, 'zip' ) || false !== strpos( $name, 'post' ) ? '10001' : 'Rehearsal';
+		default:
+			return null;
+	}
+};
+
+$urh_out    = array( 'ok' => false );
+$urh_action = (string) ( $urh_args['action'] ?? '' );
+
+try {
+	if ( 'mail' === $urh_action ) {
+		$urh_out = array( 'ok' => true, 'count' => count( $urh_mail() ) );
+	} elseif ( 'probe' === $urh_action ) {
+		$urh_out = array( 'ok' => true, 'mail' => count( $urh_mail() ), 'shop' => null, 'forms' => array() );
+		if ( ! empty( $urh_args['checkout'] ) ) {
+			$urh_shop = array( 'woocommerce' => class_exists( 'WooCommerce' ) && function_exists( 'wc_get_products' ), 'product' => null );
+			if ( $urh_shop['woocommerce'] ) {
+				// An offline gateway, in this copy only. The live site is untouched.
+				$urh_cheque            = (array) get_option( 'woocommerce_cheque_settings', array() );
+				$urh_cheque['enabled'] = 'yes';
+				$urh_cheque['title']   = isset( $urh_cheque['title'] ) && '' !== $urh_cheque['title'] ? $urh_cheque['title'] : 'Check payments';
+				update_option( 'woocommerce_cheque_settings', $urh_cheque );
+				update_option( 'woocommerce_enable_guest_checkout', 'yes' );
+				update_option( 'woocommerce_enable_signup_and_login_from_checkout', 'no' );
+				update_option( 'woocommerce_enable_checkout_login_reminder', 'no' );
+				$urh_products = wc_get_products( array( 'status' => 'publish', 'type' => 'simple', 'stock_status' => 'instock', 'limit' => 30, 'orderby' => 'price', 'order' => 'ASC' ) );
+				$urh_pick     = null;
+				foreach ( $urh_products as $urh_product ) {
+					if ( ! $urh_product->is_purchasable() || (float) $urh_product->get_price() <= 0 ) {
+						continue;
+					}
+					if ( null === $urh_pick || ( $urh_product->is_virtual() && ! $urh_pick->is_virtual() ) ) {
+						$urh_pick = $urh_product;
+					}
+					if ( $urh_pick->is_virtual() ) {
+						break;
+					}
+				}
+				if ( $urh_pick ) {
+					$urh_shop['product'] = array( 'id' => $urh_pick->get_id(), 'name' => $urh_pick->get_name(), 'price' => (string) $urh_pick->get_price(), 'virtual' => $urh_pick->is_virtual() );
+				}
+				$urh_base         = function_exists( 'wc_get_base_location' ) ? wc_get_base_location() : array( 'country' => 'US', 'state' => '' );
+				$urh_shop['base'] = array(
+					'country'  => (string) ( $urh_base['country'] ?? 'US' ),
+					'state'    => (string) ( $urh_base['state'] ?? '' ),
+					'postcode' => (string) get_option( 'woocommerce_store_postcode', '' ),
+					'city'     => (string) get_option( 'woocommerce_store_city', '' ),
+					'address'  => (string) get_option( 'woocommerce_store_address', '' ),
+				);
+			}
+			$urh_out['shop'] = $urh_shop;
+		}
+		foreach ( (array) ( $urh_args['forms'] ?? array() ) as $urh_key ) {
+			list( $urh_plugin, $urh_id ) = array_pad( explode( ':', (string) $urh_key, 2 ), 2, '' );
+			$urh_id                      = (int) $urh_id;
+			$urh_found                   = false;
+			if ( 'cf7' === $urh_plugin ) {
+				$urh_found = class_exists( 'WPCF7_ContactForm' ) && WPCF7_ContactForm::get_instance( $urh_id );
+			} elseif ( 'gf' === $urh_plugin ) {
+				$urh_found = class_exists( 'GFAPI' ) && GFAPI::get_form( $urh_id );
+			} elseif ( 'wpforms' === $urh_plugin ) {
+				$urh_found = function_exists( 'wpforms' ) && 'wpforms' === get_post_type( $urh_id );
+			}
+			$urh_out['forms'][ (string) $urh_key ] = (bool) $urh_found;
+		}
+	} elseif ( 'order' === $urh_action ) {
+		$urh_order = function_exists( 'wc_get_order' ) ? wc_get_order( (int) ( $urh_args['order_id'] ?? 0 ) ) : false;
+		$urh_out   = array( 'ok' => true, 'exists' => (bool) $urh_order );
+		if ( $urh_order ) {
+			$urh_out['status'] = (string) $urh_order->get_status();
+			$urh_out['total']  = (string) $urh_order->get_total();
+			$urh_out['items']  = count( $urh_order->get_items() );
+			$urh_out['email']  = (string) $urh_order->get_billing_email();
+		}
+		$urh_out['mail'] = $urh_mail_since( $urh_args['mail_from'] ?? 0 );
+	} elseif ( 'form' === $urh_action ) {
+		list( $urh_plugin, $urh_id ) = array_pad( explode( ':', (string) ( $urh_args['key'] ?? '' ), 2 ), 2, '' );
+		$urh_id                      = (int) $urh_id;
+		$urh_from                    = (int) ( $urh_args['mail_from'] ?? 0 );
+		$urh_out                     = array( 'ok' => true, 'sent' => false, 'entry' => null, 'notes' => array(), 'unfilled' => array(), 'message' => '' );
+		// A request from a browser: spam filters turn away a submission with no address or user agent.
+		$_SERVER['REMOTE_ADDR']     = '127.0.0.1';
+		$_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 (Update Rehearsal copy)';
+
+		if ( 'cf7' === $urh_plugin && class_exists( 'WPCF7_ContactForm' ) ) {
+			$urh_form = WPCF7_ContactForm::get_instance( $urh_id );
+			if ( ! $urh_form ) {
+				$urh_out['message'] = 'The form is not in the copy.';
+			} else {
+				$_POST = array();
+				foreach ( $urh_form->scan_form_tags() as $urh_tag ) {
+					$urh_type = (string) $urh_tag->basetype;
+					if ( '' === (string) $urh_tag->name || in_array( $urh_type, array( 'submit', 'file', 'captchac', 'captchar', 'quiz', 'recaptcha', 'turnstile', 'count' ), true ) ) {
+						if ( in_array( $urh_type, array( 'file', 'quiz' ), true ) && $urh_tag->is_required() ) {
+							$urh_out['unfilled'][] = (string) $urh_tag->name;
+						}
+						continue;
+					}
+					$urh_choices = array_values( array_filter( (array) $urh_tag->values, 'strlen' ) );
+					$urh_choice  = isset( $urh_choices[0] ) ? $urh_choices[0] : null;
+					$urh_min     = in_array( $urh_type, array( 'number', 'range' ), true ) ? $urh_tag->get_option( 'min', 'int', true ) : null;
+					$urh_val     = $urh_value( $urh_type, $urh_tag->name, $urh_choice, $urh_min );
+					if ( null === $urh_val ) {
+						if ( $urh_tag->is_required() ) {
+							$urh_out['unfilled'][] = (string) $urh_tag->name;
+						}
+						continue;
+					}
+					$_POST[ $urh_tag->name ] = 'checkbox' === $urh_type ? array( $urh_val ) : $urh_val;
+				}
+				$_POST['_wpcf7']                 = $urh_id;
+				$_POST['_wpcf7_version']         = defined( 'WPCF7_VERSION' ) ? WPCF7_VERSION : '';
+				$_POST['_wpcf7_locale']          = $urh_form->locale();
+				$_POST['_wpcf7_unit_tag']        = 'wpcf7-f' . $urh_id . '-o1';
+				$_POST['_wpcf7_container_post']  = 0;
+				$_SERVER['REQUEST_METHOD']       = 'POST';
+				$urh_flamingo                    = class_exists( 'Flamingo_Inbound_Message' ) ? (int) wp_count_posts( 'flamingo_inbound' )->publish : null;
+				$urh_result                      = $urh_form->submit();
+				$urh_status                      = (string) ( $urh_result['status'] ?? '' );
+				$urh_out['message']              = wp_strip_all_tags( (string) ( $urh_result['message'] ?? '' ) );
+				if ( 'spam' === $urh_status && class_exists( 'WPCF7_Submission' ) && WPCF7_Submission::get_instance() ) {
+					$urh_reasons = array();
+					foreach ( (array) WPCF7_Submission::get_instance()->get_spam_log() as $urh_log ) {
+						$urh_reasons[] = (string) ( $urh_log['reason'] ?? '' );
+					}
+					$urh_out['spam_reasons'] = array_values( array_filter( $urh_reasons ) );
+				}
+				$urh_out['sent']                 = 'mail_sent' === $urh_status;
+				$urh_out['status']               = $urh_status;
+				if ( 'validation_failed' === $urh_status ) {
+					$urh_fields = array();
+					foreach ( (array) ( $urh_result['invalid_fields'] ?? array() ) as $urh_invalid ) {
+						$urh_fields[] = (string) ( $urh_invalid['field'] ?? '' );
+					}
+					$urh_out['invalid'] = $urh_fields;
+				}
+				if ( null !== $urh_flamingo ) {
+					$urh_out['entry'] = (int) wp_count_posts( 'flamingo_inbound' )->publish > $urh_flamingo;
+				} else {
+					$urh_out['notes'][] = 'Contact Form 7 keeps no entries on its own, so the email is the record.';
+				}
+			}
+		} elseif ( 'gf' === $urh_plugin && class_exists( 'GFAPI' ) ) {
+			$urh_form = GFAPI::get_form( $urh_id );
+			if ( ! $urh_form ) {
+				$urh_out['message'] = 'The form is not in the copy.';
+			} else {
+				$urh_input = array();
+				foreach ( (array) $urh_form['fields'] as $urh_field ) {
+					$urh_type    = (string) $urh_field->type;
+					$urh_choice  = null;
+					if ( ! empty( $urh_field->choices ) && is_array( $urh_field->choices ) ) {
+						$urh_first  = reset( $urh_field->choices );
+						$urh_choice = (string) ( $urh_first['value'] ?? $urh_first['text'] ?? '' );
+					}
+					if ( in_array( $urh_type, array( 'checkbox', 'consent' ), true ) && ! empty( $urh_field->inputs ) ) {
+						$urh_input[ 'input_' . str_replace( '.', '_', (string) $urh_field->inputs[0]['id'] ) ] = 'consent' === $urh_type ? '1' : $urh_choice;
+						continue;
+					}
+					if ( 'name' === $urh_type && ! empty( $urh_field->inputs ) ) {
+						foreach ( $urh_field->inputs as $urh_input_def ) {
+							if ( empty( $urh_input_def['isHidden'] ) && in_array( (string) $urh_input_def['label'], array( 'First', 'Last' ), true ) ) {
+								$urh_input[ 'input_' . str_replace( '.', '_', (string) $urh_input_def['id'] ) ] = 'Rehearsal';
+							}
+						}
+						continue;
+					}
+					if ( 'address' === $urh_type && ! empty( $urh_field->inputs ) ) {
+						$urh_sample = array( 'Street Address' => '1 Rehearsal Way', 'City' => 'Rehearsal', 'State / Province' => 'NY', 'ZIP / Postal Code' => '10001', 'Country' => 'United States' );
+						foreach ( $urh_field->inputs as $urh_input_def ) {
+							if ( isset( $urh_sample[ (string) $urh_input_def['label'] ] ) ) {
+								$urh_input[ 'input_' . str_replace( '.', '_', (string) $urh_input_def['id'] ) ] = $urh_sample[ (string) $urh_input_def['label'] ];
+							}
+						}
+						continue;
+					}
+					$urh_min = isset( $urh_field->rangeMin ) && '' !== $urh_field->rangeMin ? $urh_field->rangeMin : null;
+					$urh_val = $urh_value( 'multiselect' === $urh_type ? 'select' : $urh_type, 'gf_' . $urh_field->id, $urh_choice, $urh_min );
+					if ( null === $urh_val ) {
+						if ( ! empty( $urh_field->isRequired ) && ! in_array( $urh_type, array( 'hidden', 'html', 'section', 'page', 'honeypot', 'captcha' ), true ) ) {
+							$urh_out['unfilled'][] = (string) ( $urh_field->label ?? $urh_field->id );
+						}
+						continue;
+					}
+					if ( 'date' === $urh_type ) {
+						$urh_val = gmdate( 'm/d/Y' );
+					}
+					$urh_input[ 'input_' . $urh_field->id ] = $urh_val;
+				}
+				$urh_count_before = (int) GFAPI::count_entries( $urh_id );
+				$urh_result       = GFAPI::submit_form( $urh_id, $urh_input );
+				$urh_valid        = is_array( $urh_result ) && ! empty( $urh_result['is_valid'] );
+				$urh_out['sent']  = $urh_valid;
+				$urh_out['entry'] = (int) GFAPI::count_entries( $urh_id ) > $urh_count_before;
+				if ( ! $urh_valid ) {
+					$urh_out['message'] = is_array( $urh_result ) && ! empty( $urh_result['validation_messages'] ) ? wp_strip_all_tags( implode( ' ', array_map( 'strval', (array) $urh_result['validation_messages'] ) ) ) : 'Gravity Forms did not accept the test entry.';
+				}
+				$urh_out['notifications'] = is_array( $urh_form['notifications'] ?? null ) ? count( $urh_form['notifications'] ) : 0;
+			}
+		} elseif ( 'wpforms' === $urh_plugin && function_exists( 'wpforms' ) ) {
+			$urh_post = get_post( $urh_id );
+			$urh_data = $urh_post ? wpforms_decode( $urh_post->post_content ) : array();
+			if ( empty( $urh_data['fields'] ) ) {
+				$urh_out['message'] = 'The form is not in the copy.';
+			} else {
+				$urh_fields = array();
+				foreach ( (array) $urh_data['fields'] as $urh_field ) {
+					$urh_type   = (string) ( $urh_field['type'] ?? '' );
+					$urh_choice = null;
+					if ( ! empty( $urh_field['choices'] ) && is_array( $urh_field['choices'] ) ) {
+						$urh_first  = reset( $urh_field['choices'] );
+						$urh_choice = (string) ( $urh_first['value'] !== '' ? $urh_first['value'] : $urh_first['label'] );
+					}
+					if ( 'name' === $urh_type ) {
+						$urh_fields[ $urh_field['id'] ] = 'simple' === ( $urh_field['format'] ?? 'simple' ) ? 'Rehearsal Person' : array( 'first' => 'Rehearsal', 'last' => 'Person' );
+						continue;
+					}
+					if ( 'email' === $urh_type ) {
+						$urh_fields[ $urh_field['id'] ] = empty( $urh_field['confirmation'] ) ? 'rehearsal@example.invalid' : array( 'primary' => 'rehearsal@example.invalid', 'secondary' => 'rehearsal@example.invalid' );
+						continue;
+					}
+					if ( 'checkbox' === $urh_type ) {
+						$urh_fields[ $urh_field['id'] ] = array( $urh_choice );
+						continue;
+					}
+					$urh_val = $urh_value( 'phone' === $urh_type ? 'tel' : ( 'text' === $urh_type || 'textarea' === $urh_type || 'select' === $urh_type || 'radio' === $urh_type || 'number' === $urh_type || 'url' === $urh_type ? $urh_type : '' ), 'wpf_' . $urh_field['id'], $urh_choice, null );
+					if ( null === $urh_val ) {
+						if ( ! empty( $urh_field['required'] ) ) {
+							$urh_out['unfilled'][] = (string) ( $urh_field['label'] ?? $urh_field['id'] );
+						}
+						continue;
+					}
+					$urh_fields[ $urh_field['id'] ] = $urh_val;
+				}
+				$_POST                     = array( 'wpforms' => array( 'id' => $urh_id, 'fields' => $urh_fields, 'nonce' => wp_create_nonce( 'wpforms::form_' . $urh_id ) ) );
+				$_SERVER['REQUEST_METHOD'] = 'POST';
+				$urh_process               = wpforms()->obj( 'process' );
+				$urh_entries_before        = ( wpforms()->obj( 'entry' ) && method_exists( wpforms()->obj( 'entry' ), 'get_entries' ) ) ? (int) wpforms()->obj( 'entry' )->get_entries( array( 'form_id' => $urh_id ), true ) : null;
+				$urh_process->process( $_POST['wpforms'] );
+				$urh_errors                = (array) ( $urh_process->errors[ $urh_id ] ?? array() );
+				$urh_out['sent']           = ! $urh_errors;
+				if ( $urh_errors ) {
+					$urh_out['message'] = wp_strip_all_tags( implode( ' ', array_map( function ( $urh_e ) { return is_scalar( $urh_e ) ? (string) $urh_e : wp_json_encode( $urh_e ); }, $urh_errors ) ) );
+				}
+				if ( null !== $urh_entries_before ) {
+					$urh_out['entry'] = (int) wpforms()->obj( 'entry' )->get_entries( array( 'form_id' => $urh_id ), true ) > $urh_entries_before;
+				} else {
+					$urh_out['notes'][] = 'This edition of WPForms keeps no entries, so the email is the record.';
+				}
+			}
+		} else {
+			$urh_out['message'] = 'The form plugin is not active in the copy.';
+		}
+		$urh_out['mail'] = $urh_mail_since( $urh_from );
+	}
+} catch ( Throwable $urh_error ) {
+	$urh_out = array( 'ok' => false, 'error' => $urh_error->getMessage() );
+}
+
+ob_end_clean();
+echo "\n" . json_encode( $urh_out );
 PHP;
 	}
 
