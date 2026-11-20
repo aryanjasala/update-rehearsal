@@ -406,3 +406,93 @@
 .urh-pane .axle-toolbar__end {
 	max-width: 100%;
 }
+
+/* Keep this tab open, and the low-memory note */
+
+.urh-keep-open {
+	display: block;
+	margin-top: 8px;
+}
+
+.urh-keep-open-run {
+	margin: 0 0 12px;
+}
+
+/* Checkout and forms */
+
+.urh-checks-list {
+	border: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.urh-checks-list .description {
+	display: block;
+	margin-left: 24px;
+}
+
+.urh-check-report {
+	margin-top: 16px;
+}
+
+.urh-step-message {
+	margin-top: 4px;
+	overflow-wrap: anywhere;
+}
+
+.urh-steps-table th[scope="row"] {
+	font-weight: 400;
+}
+
+/* One download control: a button that opens a short list. */
+
+.urh-actions {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.urh-download {
+	display: inline-block;
+	position: relative;
+}
+
+.urh-download > summary {
+	cursor: pointer;
+	list-style: none;
+}
+
+.urh-download > summary::-webkit-details-marker {
+	display: none;
+}
+
+.urh-download > summary::after {
+	content: " \25BE";
+}
+
+.urh-download-menu {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 2px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	inset-inline-start: 0;
+	min-width: 220px;
+	padding: 10px 12px;
+	position: absolute;
+	top: calc(100% + 4px);
+	z-index: 10;
+}
+
+.urh-download-menu .button-link {
+	text-align: start;
+}
+
+/* "Update for real" under red is a plain link. */
+
+.urh-update-real--plain {
+	margin-inline-start: 4px;
+}

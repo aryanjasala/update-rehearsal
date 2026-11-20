@@ -9,6 +9,7 @@ namespace AryanX\Axle\UpdateRehearsal\Admin;
 
 use AryanX\Axle\UpdateRehearsal\Bundle\Estimate;
 use AryanX\Axle\UpdateRehearsal\Bundle\Scripts;
+use AryanX\Axle\UpdateRehearsal\Checks;
 use AryanX\Axle\UpdateRehearsal\Limits;
 use AryanX\Axle\UpdateRehearsal\Operations;
 use AryanX\Axle\UpdateRehearsal\Rehearsals;
@@ -271,6 +272,8 @@ final class Page implements Service {
 			'assetLimit'     => Limits::asset_limit(),
 			'preselect'      => $this->preselect(),
 			'testUrls'       => $this->pages(),
+			'checks'         => Checks::offer(),
+			'beaconUrl'      => add_query_arg( array( '_wpnonce' => wp_create_nonce( 'wp_rest' ) ), rest_url( Controller::NAMESPACE . '/rehearsals' ) ),
 			'ignoredErrors'  => Limits::ignored_errors(),
 			'normaliseRules' => Limits::normalise_html(),
 			'consts'         => Scripts::debug_consts(),
@@ -815,14 +818,20 @@ final class Page implements Service {
 			</ul>
 			</section>
 
+			<?php $this->render_checks_card(); ?>
+
 			<section class="axle-card" id="urh-size">
-			<h2 class="axle-card__title"><?php esc_html_e( '3. Size of the copy', 'update-rehearsal' ); ?></h2>
+			<h2 class="axle-card__title"><?php esc_html_e( '4. Size of the copy', 'update-rehearsal' ); ?></h2>
 			<div class="urh-estimate-region" aria-live="polite">
 				<?php echo self::estimate_html( $estimate ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in estimate_html(). ?>
 			</div>
 
 			<p class="urh-start">
-				<button type="button" class="button button-primary button-hero" id="urh-start" <?php disabled( $estimate['over_limit'] || $estimate['pending'] ); ?>><?php esc_html_e( 'Start rehearsal', 'update-rehearsal' ); ?></button>
+				<button type="button" class="button button-primary button-hero" id="urh-start" aria-describedby="urh-keep-open" <?php disabled( $estimate['over_limit'] || $estimate['pending'] ); ?>><?php esc_html_e( 'Start rehearsal', 'update-rehearsal' ); ?></button>
+				<span class="description urh-keep-open" id="urh-keep-open"><?php esc_html_e( 'Keep this tab open until the report shows. The copy lives in this tab, and leaving the page stops the rehearsal.', 'update-rehearsal' ); ?></span>
+			</p>
+			<p class="notice notice-warning inline urh-memory-note" id="urh-memory-note" hidden>
+				<?php esc_html_e( 'The copy runs in this browser\'s memory. This device looks small for it (a phone, or little memory), so the tab may close by itself. Use a laptop or desktop for a big site, or leave out tables above.', 'update-rehearsal' ); ?>
 			</p>
 			<p class="description urh-external">
 				<?php
@@ -1017,7 +1026,7 @@ final class Page implements Service {
 			<label for="urh-filter-verdict"><?php esc_html_e( 'Verdict', 'update-rehearsal' ); ?></label>
 			<select id="urh-filter-verdict" name="verdict">
 				<option value=""><?php esc_html_e( 'All verdicts', 'update-rehearsal' ); ?></option>
-				<?php foreach ( array( 'green', 'amber', 'red', 'failed' ) as $option ) : ?>
+				<?php foreach ( array( 'green', 'amber', 'red', 'failed', 'stopped' ) as $option ) : ?>
 					<option value="<?php echo esc_attr( $option ); ?>" <?php selected( $verdict, $option ); ?>><?php echo esc_html( Report::verdict_name( 'failed' === $option ? '' : $option ) ); ?></option>
 				<?php endforeach; ?>
 			</select>
@@ -1080,6 +1089,36 @@ final class Page implements Service {
 		<div id="urh-report" class="urh-report" data-rehearsal="<?php echo esc_attr( (string) $item['id'] ); ?>">
 			<p class="urh-verdict-line"><span class="axle-badge axle-badge--<?php echo esc_attr( self::verdict_tone( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ) ); ?> urh-badge urh-<?php echo esc_attr( '' !== $item['verdict'] ? $item['verdict'] : 'failed' ); ?>"><?php echo esc_html( Report::verdict_name( 'failed' === $item['verdict'] ? '' : $item['verdict'] ) ); ?></span></p>
 		</div>
+		<?php
+	}
+
+	/**
+	 * The "Checkout and forms" card: what the copy can also try, before and after the change.
+	 */
+	private function render_checks_card(): void {
+		$offer = Checks::offer();
+		if ( ! $offer['checkout']['available'] && ! $offer['forms'] ) {
+			return;
+		}
+		?>
+		<section class="axle-card urh-checks" id="urh-checks" aria-labelledby="urh-checks-title">
+			<h2 class="axle-card__title" id="urh-checks-title"><?php esc_html_e( '3. Checkout and forms (optional)', 'update-rehearsal' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'The copy tries each one before and after the change and names the step that broke. Everything happens inside the copy, in this browser. No order and no entry is made on this site, and the copy sends no email.', 'update-rehearsal' ); ?></p>
+			<fieldset class="urh-checks-list">
+				<legend class="screen-reader-text"><?php esc_html_e( 'Checkout and forms to rehearse', 'update-rehearsal' ); ?></legend>
+				<?php if ( $offer['checkout']['available'] ) : ?>
+					<p><label><input type="checkbox" class="urh-check" value="checkout" checked> <?php esc_html_e( 'Place a test order', 'update-rehearsal' ); ?></label>
+					<span class="description"><?php esc_html_e( 'Turns on an offline payment method in the copy only, adds an in-stock product to a cart, places the order through the Store API, then checks the order and its emails.', 'update-rehearsal' ); ?></span></p>
+				<?php endif; ?>
+				<?php foreach ( $offer['forms'] as $form ) : ?>
+					<p><label><input type="checkbox" class="urh-check" value="<?php echo esc_attr( $form['key'] ); ?>" data-name="<?php echo esc_attr( $form['name'] ); ?>"> <?php echo esc_html( $form['name'] ); ?></label>
+					<span class="description"><?php echo esc_html( $form['plugin_name'] ); ?></span></p>
+				<?php endforeach; ?>
+			</fieldset>
+			<?php if ( $offer['smoke_test'] ) : ?>
+				<p class="description"><?php esc_html_e( 'Axle Smoke Test is active, so the copy also checks its key URLs and applies its must-contain rules.', 'update-rehearsal' ); ?></p>
+			<?php endif; ?>
+		</section>
 		<?php
 	}
 
@@ -1230,10 +1269,11 @@ final class Page implements Service {
 	 */
 	public static function verdict_tone( string $verdict ): string {
 		$tones = array(
-			'green'  => 'good',
-			'amber'  => 'warning',
-			'red'    => 'error',
-			'failed' => 'error',
+			'green'   => 'good',
+			'amber'   => 'warning',
+			'red'     => 'error',
+			'failed'  => 'error',
+			'stopped' => 'warning',
 		);
 
 		return $tones[ $verdict ] ?? 'neutral';

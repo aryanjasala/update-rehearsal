@@ -38,11 +38,19 @@ What the report shows:
 * **A side by side visual compare** of each page, right after the run.
 * **What an added plugin did**: new database tables, options and autoloaded data, scheduled tasks, admin menu items, and the scripts and stylesheets it puts on each page, with their size.
 * **What a removed plugin left behind**: shortcodes and blocks without their plugin in the content of the pages checked, and admin screens that went missing.
-* **Update, install or deactivate for real** links to the normal WordPress action for the same items. Under an amber or red verdict it asks first and names the problems, and deleting a plugin always asks, because it cannot be undone. The report downloads as JSON or HTML.
+* **Update, install or deactivate for real** links to the normal WordPress action for the same items. Under an amber or red verdict it asks first and names the problems, and deleting a plugin always asks, because it cannot be undone. The report downloads as JSON or HTML, from one Download report button. Under a red verdict "Update for real" is a plain link, not a button.
 
 Every report says that it ran on a copy and nothing changed on your site.
 
 The Plugins screen shows "Rehearsed 2 hours ago: green" under each update you rehearsed. The Rehearse tab lists your last rehearsals with a Run again link, and the History tab keeps every report, with a filter for the kind and the verdict.
+
+= Rehearse a checkout and a form =
+
+An update can pass every page check and still break the moment people pay or write to you. On the Rehearse tab, tick "Place a test order" (WooCommerce) and any of your Contact Form 7, Gravity Forms or WPForms forms. The copy does each one before and after the change, and the report names the step that broke: add to cart, place the order, the order exists, its emails were produced, send the form, the entry was saved, the email was produced.
+
+It all happens inside the copy, in your browser. In the copy an offline payment method (cheque) is turned on, an in-stock product is added to a cart, and the order goes through the WooCommerce Store API; forms are sent through their own plugin's code with sample values. The copy writes down the emails it would have sent (recipients and subjects, not the message) instead of sending them. No order and no form entry is made on your site, and the copy makes no outgoing requests, so payment gateways and spam services are never reached. A form with a required field the copy cannot fill, or one turned away by a spam check, is listed as not run.
+
+A step that worked before and fails after is a break, and makes the verdict red. A step that fails both times is amber: it was not working before either. When Axle Smoke Test is active, the copy also checks its key URLs and applies its must-contain rules, and only rules that newly fail after the change count.
 
 = Pages as a logged-in person =
 
@@ -53,7 +61,7 @@ Free and open source under the GPL. No pro version, no upsells, no ads in wp-adm
 = What goes into the copy =
 
 * The database, table by table. Transients, login sessions and this plugin's own data stay out. Big tables of other plugins (over 10 MB) and tables that hold sessions or logs go in without their rows, and you can include any of them on the Settings tab.
-* User email addresses and password hashes are replaced with placeholders by default. The rehearsal logs in with a user of its own.
+* Personal data and secrets are replaced by default (the "Replace user email addresses and password hashes" setting, or the `update_rehearsal_scrub_users` filter, turns all of this off). **Replaced**: user email addresses (with `user-<id>@example.invalid`), password hashes and activation keys, comment author email addresses, IP addresses and browser strings, WooCommerce billing and shipping emails and phone numbers (user profiles, orders in the posts tables and in the HPOS tables, customer lookup), the customer IP address and the address search index of orders, the site admin email, and option values that look like secrets: names containing secret, password, token, api key, private key or credential, a few well-known key formats, and keys like those inside arrays (a payment gateway's settings, for example). **Left out of the copy entirely**: application passwords and login sessions. **Kept as they are**: names, postal addresses, order totals, post content, comment text, ordinary options, and the tables of other plugins, such as form entries or a CRM. Leave a table out on the Settings tab, or add your own rules with the `update_rehearsal_scrub_row`, `update_rehearsal_secret_option_patterns` and `update_rehearsal_personal_meta_keys` filters. The same rules run for the copy in the browser and for `wp update-rehearsal bundle`. The rehearsal logs in with a user of its own.
 * The active theme and its parent, the active plugins (inactive ones too if you turn that on), must-use plugins and drop-ins. object-cache.php, advanced-cache.php and db.php stay out, because they would break the copy.
 * Development leftovers stay out: .git, node_modules, .github, top-level tests folders, zip files, and Composer packages a plugin installed for development only.
 * Uploads are not copied. The copy loads images from the live site.
@@ -66,7 +74,7 @@ A copy is capped at 100 MB once zipped, which is what your browser downloads. Co
 
 = For AI agents =
 
-On WordPress 6.9 and later, four read-only abilities list past rehearsals (by kind and verdict), read one report, plan a rehearsal of updates, a plugin to add or a plugin to remove without running it, and give the size of a copy. Running a rehearsal needs a browser, so an agent cannot start one.
+On WordPress 6.9 and later, five read-only abilities list past rehearsals (by kind and verdict), read one report, plan a rehearsal of updates, a plugin to add or a plugin to remove without running it, list the checkout and forms a rehearsal can try, and give the size of a copy. Running a rehearsal needs a browser, so an agent cannot start one.
 
 = From the command line =
 
@@ -78,6 +86,7 @@ On WordPress 6.9 and later, four read-only abilities list past rehearsals (by ki
 `wp update-rehearsal bundle --delete=akismet --output=bundle.zip`
 `wp update-rehearsal list --verdict=red`
 `wp update-rehearsal show 42`
+`wp update-rehearsal checks`
 `wp update-rehearsal settings --extra-urls=/shop/,/cart/`
 
 The bundle from `wp update-rehearsal bundle` runs in @wp-playground/cli too, for CI. The plugin's GitHub page has the commands.

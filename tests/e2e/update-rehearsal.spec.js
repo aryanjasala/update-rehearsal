@@ -248,11 +248,13 @@ test.describe( 'Update Rehearsal', () => {
 		await page.goto( `${ PAGE }&rehearsal=${ saved.body.id }` );
 		await expect( page.locator( '.urh-reasons' ) ).toContainText( 'Fatal error from Recipe Cards' );
 
+		await page.locator( '.urh-download-toggle' ).click();
 		const [ json ] = await Promise.all( [ page.waitForEvent( 'download' ), page.locator( '.urh-download-json' ).click() ] );
 		expect( json.suggestedFilename() ).toBe( `update-rehearsal-${ saved.body.id }.json` );
 		const data = JSON.parse( require( 'fs' ).readFileSync( await json.path(), 'utf8' ) );
 		expect( data.verdict ).toBe( 'red' );
 
+		await expect( page.locator( '.urh-download-html' ) ).toBeVisible();
 		const [ html ] = await Promise.all( [ page.waitForEvent( 'download' ), page.locator( '.urh-download-html' ).click() ] );
 		const text = require( 'fs' ).readFileSync( await html.path(), 'utf8' );
 		expect( text ).toContain( '<title>Recipe Cards 1.0 to 1.1</title>' );

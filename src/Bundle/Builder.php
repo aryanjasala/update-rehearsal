@@ -541,6 +541,7 @@ class Builder {
 		Files::write( $dir . 'rehearsal/mu-plugin.php', Scripts::mu_plugin() );
 		Files::write( $dir . 'rehearsal/operate.php', Scripts::operate() );
 		Files::write( $dir . 'rehearsal/inspect.php', Scripts::inspect() );
+		Files::write( $dir . 'rehearsal/checks.php', Scripts::checks() );
 
 		$job['phase'] = 'done';
 		$manifest     = $this->manifest( $job );
@@ -709,7 +710,7 @@ class Builder {
 	 */
 	private function public_files( array $job ): array {
 		return array_merge(
-			array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/operate.php', 'rehearsal/inspect.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json' ),
+			array( 'manifest.json', 'rehearsal/setup.php', 'rehearsal/apply.php', 'rehearsal/operate.php', 'rehearsal/inspect.php', 'rehearsal/checks.php', 'rehearsal/mu-plugin.php', 'blueprint.json', 'blueprint-before.json' ),
 			$job['parts'],
 			array_column( $job['items'], 'file' )
 		);

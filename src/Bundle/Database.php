@@ -269,17 +269,7 @@ class Database {
 	 * @return array
 	 */
 	public function scrub( string $table, array $row ): array {
-		global $wpdb;
-
-		if ( $wpdb->base_prefix . 'users' === $table ) {
-			$row['user_email']          = 'user-' . (int) ( $row['ID'] ?? 0 ) . '@example.invalid';
-			$row['user_pass']           = '';
-			$row['user_activation_key'] = '';
-		} elseif ( $wpdb->prefix . 'options' === $table && in_array( $row['option_name'] ?? '', array( 'admin_email', 'new_admin_email' ), true ) ) {
-			$row['option_value'] = 'admin@example.invalid';
-		}
-
-		return $row;
+		return Scrub::row( $table, $row );
 	}
 
 	/**
@@ -302,7 +292,7 @@ class Database {
 				}
 				return true;
 			case $wpdb->base_prefix . 'usermeta':
-				return 'session_tokens' !== ( $row['meta_key'] ?? '' );
+				return 'session_tokens' !== ( $row['meta_key'] ?? '' ) && ! ( $this->settings->scrub_users() && Scrub::drops( $table, $row ) );
 			case $wpdb->prefix . 'posts':
 				return Rehearsals::POST_TYPE !== ( $row['post_type'] ?? '' );
 			case $wpdb->prefix . 'postmeta':

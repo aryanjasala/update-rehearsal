@@ -77,7 +77,7 @@ final class ServicesTest extends PluginTestCase {
 		$service->register_category();
 		$service->register_abilities();
 
-		$this->assertSame( array( 'update-rehearsal/list-rehearsals', 'update-rehearsal/get-rehearsal', 'update-rehearsal/plan-rehearsal', 'update-rehearsal/get-bundle-estimate' ), array_keys( $abilities ) );
+		$this->assertSame( array( 'update-rehearsal/list-rehearsals', 'update-rehearsal/get-rehearsal', 'update-rehearsal/plan-rehearsal', 'update-rehearsal/list-checks', 'update-rehearsal/get-bundle-estimate' ), array_keys( $abilities ) );
 		foreach ( $abilities as $args ) {
 			$this->assertTrue( $args['meta']['annotations']['readonly'] );
 			$this->assertTrue( $args['meta']['show_in_rest'] );

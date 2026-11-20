@@ -71,7 +71,7 @@ class Rehearsals implements Service {
 		}
 
 		update_post_meta( $id, self::META, wp_slash( (string) wp_json_encode( $report ) ) );
-		update_post_meta( $id, self::VERDICT_META, '' !== $report['verdict'] ? $report['verdict'] : 'failed' );
+		update_post_meta( $id, self::VERDICT_META, '' !== $report['verdict'] ? $report['verdict'] : ( $report['stopped'] ? 'stopped' : 'failed' ) );
 		update_post_meta( $id, self::KIND_META, $report['kind'] );
 
 		if ( 'finished' === $report['status'] ) {
@@ -84,6 +84,15 @@ class Rehearsals implements Service {
 			 * @param int   $post_id The stored rehearsal.
 			 */
 			do_action( 'update_rehearsal_rehearsal_finished', $report, $id );
+		} elseif ( $report['stopped'] ) {
+			/**
+			 * Fires when someone left the page in the middle of a rehearsal. The
+			 * copy lived in that page, so the rehearsal is gone.
+			 *
+			 * @param array $report  What the browser knew when the page closed.
+			 * @param int   $post_id The stored rehearsal.
+			 */
+			do_action( 'update_rehearsal_rehearsal_stopped', $report, $id );
 		} else {
 			/**
 			 * Fires when a rehearsal could not finish: the bundle failed to build,
@@ -166,7 +175,7 @@ class Rehearsals implements Service {
 			'order'          => 'DESC',
 		);
 		$verdict    = (string) ( $args['verdict'] ?? '' );
-		if ( in_array( $verdict, array( 'green', 'amber', 'red', 'failed' ), true ) ) {
+		if ( in_array( $verdict, array( 'green', 'amber', 'red', 'failed', 'stopped' ), true ) ) {
 			$query_args['meta_key']   = self::VERDICT_META; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Few rows, the plugin's own post type.
 			$query_args['meta_value'] = $verdict; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Few rows, the plugin's own post type.
 		}

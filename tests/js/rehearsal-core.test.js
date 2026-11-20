@@ -436,3 +436,40 @@ test( 'compareUrl keeps the role a page was checked as', () => {
 	assert.equal( core.compareUrl( { path: '/wp-admin/', label: 'Dashboard', admin: true, as: 'editor', compare: false }, side, side ).as, 'editor' );
 	assert.equal( core.compareUrl( { path: '/', label: 'Home' }, side, side ).as, '' );
 } );
+
+// ---------------------------------------------------------------------------
+// Smoke Test rules and checkout and form checks.
+// ---------------------------------------------------------------------------
+
+test( 'rules: text is found in what a visitor reads, selectors go to the matcher', () => {
+	const html = '<html><head><title>Shop</title></head><body><h1>Cart</h1><p>Add to cart</p><script>var x="Secret"</script></body></html>';
+	assert.deepEqual( core.ruleFindings( html, { must: [ 'add to cart' ], must_not: [ 'Secret' ] } ), [] );
+	assert.deepEqual( core.ruleFindings( html, { must: [ 'Checkout' ], must_not: [ 'Cart' ] } ), [ 'The page must contain "Checkout", but it does not.', 'The page must not contain "Cart", but it does.' ] );
+	assert.deepEqual( core.ruleFindings( html, { must: [ '.buy' ] }, () => false ), [ 'The page must contain ".buy", but it does not.' ] );
+	assert.deepEqual( core.ruleFindings( html, { must: [ '.buy' ] } ), [], 'a selector that cannot be read is not checked' );
+	assert.deepEqual( core.ruleFindings( html, { must: [ 'text:form' ] } ), [ 'The page must contain "form", but it does not.' ], 'text: forces text' );
+	assert.ok( core.isSelectorRule( 'form' ) && core.isSelectorRule( '#cart' ) && core.isSelectorRule( 'css:a.b' ) && ! core.isSelectorRule( 'Cart' ) );
+	assert.deepEqual( core.newRuleFindings( [ 'a', 'b' ], [ 'b', 'c' ] ), [ 'c' ] );
+} );
+
+test( 'a check that worked before and fails after names the step that broke', () => {
+	const ok = ( id ) => ( { id, label: id.toUpperCase(), state: 'ok', message: '' } );
+	const bad = ( id, message ) => ( { id, label: id.toUpperCase(), state: 'failed', message } );
+	const skip = ( id ) => ( { id, label: id, state: 'skipped', message: '' } );
+
+	assert.deepEqual( core.judgeCheck( [ ok( 'cart' ), ok( 'order' ) ], [ ok( 'cart' ), bad( 'order', 'No payment method' ) ] ), { result: 'broke', step: 'ORDER', message: 'No payment method' } );
+	assert.equal( core.judgeCheck( [ ok( 'cart' ), bad( 'order', 'x' ) ], [ ok( 'cart' ), bad( 'order', 'x' ) ] ).result, 'failed_both' );
+	assert.equal( core.judgeCheck( [ ok( 'cart' ), bad( 'order', 'x' ) ], [ ok( 'cart' ), ok( 'order' ) ] ).result, 'ok', 'fixed by the change' );
+	assert.equal( core.judgeCheck( [ skip( 'send' ) ], [ skip( 'send' ) ] ).result, 'skipped' );
+	assert.equal( core.judgeCheck( [ ok( 'cart' ), ok( 'order' ) ], [ ok( 'cart' ), ok( 'order' ) ] ).result, 'ok' );
+} );
+
+test( 'a broken checkout makes the verdict red, one that never worked makes green amber', () => {
+	const broke = core.checkReasons( [ { name: 'Checkout', result: 'broke', step: 'Place the order', message: 'x' }, { name: 'Form', result: 'ok' } ] );
+	assert.equal( broke.length, 1 );
+	assert.equal( core.withCheckReasons( 'green', broke ), 'red' );
+	const both = core.checkReasons( [ { name: 'Form', result: 'failed_both', step: 'Send', message: '' } ] );
+	assert.equal( core.withCheckReasons( 'green', both ), 'amber' );
+	assert.equal( core.withCheckReasons( 'red', both ), 'red' );
+	assert.equal( core.withCheckReasons( 'green', [] ), 'green' );
+} );

@@ -402,6 +402,8 @@ final class NextVersionTest extends PluginTestCase {
 		foreach ( array(
 			'operate' => Scripts::operate(),
 			'inspect' => Scripts::inspect(),
+			'checks'  => Scripts::checks(),
+			'mu'      => str_replace( '%UPLOADS%', "''", Scripts::mu_plugin() ),
 		) as $name => $source ) {
 			$file = $this->file( $name . '.php', $source );
 			exec( escapeshellarg( PHP_BINARY ) . ' -l ' . escapeshellarg( $file ) . ' 2>&1', $output, $status );

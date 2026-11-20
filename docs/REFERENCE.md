@@ -37,14 +37,36 @@ search: coffee              submit a search
 
 The report lists each step with its status and new errors, like every other page. A role the site does not have is skipped.
 
+### Checkout and forms
+
+Under **3. Checkout and forms** on the Rehearse tab, tick "Place a test order" (WooCommerce active, and `manage_woocommerce`) and any forms you may edit in their own plugin. The copy runs each one before and after the change, for every kind of rehearsal.
+
+| Check | Steps | How |
+| --- | --- | --- |
+| Place a test order | The shop is ready in the copy, Add the product to the cart, Place the order, The order exists in the shop, The order emails are produced | `rehearsal/checks.php` turns on the offline cheque gateway and guest checkout, in the copy only, and picks the cheapest in-stock simple product (a virtual one first). The browser then calls the Store API inside the copy: `GET /wc/store/v1/cart` for the nonce and cart token, `POST /cart/add-item`, `POST /checkout` with a placeholder customer on the shop's base country. The script reads the order back and the emails the copy captured |
+| Contact Form 7 | Send the form, The entry is saved (Flamingo only), The email is produced | `WPCF7_ContactForm::submit()` with a sample value for each simple field. Without Flamingo, CF7 keeps no entries and the email is the record |
+| Gravity Forms | Send the form, The entry is saved, The email is produced | `GFAPI::submit_form()` with sample values. The entry is checked by counting entries before and after. A form with no notification skips the email step |
+| WPForms | Send the form, The entry is saved (Pro only), The email is produced | The plugin's own processing with sample values |
+
+A required field the copy cannot fill (a file upload, a quiz, a custom type), or a submission turned away by a spam check, is shown as "Not run" with the reason. The copy makes no outgoing requests, so reCAPTCHA, Akismet and payment gateways are never reached.
+
+**Nothing happens on your site.** The code that places the order and sends the forms is a script inside the bundle (`rehearsal/checks.php`) and runs only in the copy. The live-side classes only list the forms and read capabilities, and a test fails if any of them could place an order or submit a form. An end-to-end test counts orders, posts, comments, emails and form mail on the live site before and after a rehearsal and requires no difference.
+
+The copy writes each email it would have sent (recipients and subject, never the message) to a file in the copy, so the checks can see them. Nothing is sent. The placeholder customer is `rehearsal@example.invalid`.
+
+Each check compares its steps before and after. A step that worked before and fails after is a break: the report names the step and the reason, and the verdict is red. A step that fails both times is amber, because the change did not cause it. PHP errors the copy logs during the checks count like errors on a page.
+
+**Axle Smoke Test.** When Axle Smoke Test is active, the copy also requests its key URLs that a visitor can open, and applies each URL's must-contain and must-not-contain rules (plain text, or a CSS selector such as `.buy-button`, read the way Smoke Test reads them). A rule that already failed before the change is not counted. Smoke Test is read through its public classes with every call guarded, so a missing or older Smoke Test changes nothing (`update_rehearsal_use_smoke_test` turns it off).
+
 ### Verdicts
 
 | Verdict | When |
 | --- | --- |
 | green | No new PHP errors, every page answers with the same status, nothing visible changed |
-| amber | A new warning, notice, deprecation or database error, a changed status, a visible change on a page that is compared, or a shortcode, block or admin screen left without its plugin after a removal |
-| red | A new fatal error, a page that answered under 500 before and 500 or more after, a page that is blank after the change, or a plugin that could not be switched on in the copy |
+| amber | A new warning, notice, deprecation or database error, a changed status, a visible change on a page that is compared, a shortcode, block or admin screen left without its plugin after a removal, a checkout or form step that failed before and after, or an Axle Smoke Test rule that newly fails |
+| red | A new fatal error, a page that answered under 500 before and 500 or more after, a page that is blank after the change, a plugin that could not be switched on in the copy, or a checkout or form step that worked before the change and fails after it |
 | failed | The rehearsal could not finish: the bundle failed to build, a package could not be downloaded, or Playground did not start. The reason is stored |
+| stopped | Someone left the page while the rehearsal ran. The copy lives in that page, so nothing was kept. The browser warns first, and History records "Stopped: you left the page." |
 
 Errors are matched by level, source and message, without line numbers, so a warning that only moved is not new. Errors inside WordPress go to the first plugin or theme in the stack trace.
 
@@ -72,7 +94,7 @@ Under the message the screen lists the biggest tables that are not WordPress tab
 | `update_rehearsal_excluded_tables` | filter | `( string[] $names, array $tables )`. Tables copied as structure only. `$tables` has every table with `rows`, `bytes` and `core`. Core tables always go in full |
 | `update_rehearsal_table_size_threshold` | filter | `( int $bytes )`. Size above which a table that is not a core table goes in as structure only. Default 10 MB. 0 copies everything in full |
 | `update_rehearsal_include_inactive_plugins` | filter | `( bool $include )`. Copy inactive plugins. Default false, or the setting. Inactive plugins cannot change the pages checked |
-| `update_rehearsal_scrub_users` | filter | `( bool $scrub )`. Replace user emails and password hashes in the copy. Default true, or the setting |
+| `update_rehearsal_scrub_users` | filter | `( bool $scrub )`. Replace personal data and secrets in the copy (see What the copy keeps and replaces). Default true, or the setting. False copies everything as it is |
 | `update_rehearsal_test_urls` | filter | `( array $urls )`. The pages requested before and after. Each entry: `path` (relative to the home page), `label`, `admin` (an admin screen), `as` (the role to log in as: empty for a visitor, `administrator` for admin screens), `compare` (diff the HTML; off for admin screens). Plain strings work too |
 | `update_rehearsal_normalise_html` | filter | `( string[] $patterns )`. JavaScript regular expression sources removed from each page before the comparison, with the `gi` flags |
 | `update_rehearsal_ignored_errors` | filter | `( string[] $patterns )`. Errors that never count: plain text found in the message or path, or `/regex/flags` |
@@ -101,11 +123,20 @@ Under the message the screen lists the biggest tables that are not WordPress tab
 | `update_rehearsal_upload_max_bytes` | filter | `( int $bytes )`. The largest zip file that can be chosen in the browser. Default 25 MB, at least 1 MB |
 | `update_rehearsal_asset_limit` | filter | `( int $limit )`. How many new scripts and stylesheets are requested to measure their size. Default 40, between 1 and 200 |
 | `update_rehearsal_recent_limit` | filter | `( int $limit )`. How many recent rehearsals the Rehearse tab lists. Default 10, between 1 and 50 |
+| `update_rehearsal_secret_option_patterns` | filter | `( string[] $patterns )`. Option names, as SQL LIKE patterns, whose value is replaced by an empty string in the copy. Default `%secret%`, `%password%`, `%passwd%`, `%api\_key%`, `%apikey%`, `%api-key%`, `%token%`, `%private\_key%`, `%credential%`, `%\_pass`. A plain on or off value is kept |
+| `update_rehearsal_secret_value_patterns` | filter | `( string[] $patterns )`. Regular expressions (with delimiters) for values that look like secrets whatever the option is called, such as `sk_live_` keys, AWS access keys and private key blocks |
+| `update_rehearsal_personal_meta_keys` | filter | `( string[] $keys )`. User, post and order meta keys, as SQL LIKE patterns, whose email, phone or address-index values are replaced. Default the WooCommerce billing and shipping email and phone keys, `_billing_address_index`, `_shipping_address_index`, `_customer_ip_address` and `_customer_user_agent` |
+| `update_rehearsal_scrub_row` | filter | `( array $row, string $table )`. Each row after the built-in replacements, before it goes into the copy. Use it for a form entries table or a CRM |
+| `update_rehearsal_use_smoke_test` | filter | `( bool $use )`. Whether the copy checks Axle Smoke Test's key URLs and applies its rules. Default true when Smoke Test is active |
+| `update_rehearsal_can_rehearse_checkout` | filter | `( bool $allowed, int $user_id )`. Whether a person may rehearse the checkout. Default: they can `manage_woocommerce` |
+| `update_rehearsal_can_rehearse_form` | filter | `( bool $allowed, array $form, int $user_id )`. Whether a person may rehearse one form. `$form`: `key` (such as `cf7:12`), `plugin`, `id`, `name`. Default: they may edit it in its own plugin |
+| `update_rehearsal_form_limit` | filter | `( int $limit )`. How many forms of each plugin the screen lists. Default 50, between 1 and 200 |
 | `update_rehearsal_rehearsal_started` | action | `( array $job )`. Someone pressed Start and the bundle started building. `$job`: `id`, `user`, `items` (updates, plugins to add, plugins to remove), `php` |
 | `update_rehearsal_bundle_built` | action | `( string $dir, array $manifest )`. A bundle is ready, in the browser flow and for WP-CLI |
 | `update_rehearsal_rehearsal_finished` | action | `( array $report, int $post_id )`. A rehearsal finished and its report was stored |
 | `update_rehearsal_rehearsal_failed` | action | `( WP_Error $error, array $context )`. A rehearsal could not finish. `$context`: `items`, `php`, `post_id` (0 when the bundle failed) |
 | `update_rehearsal_settings_saved` | action | `( array $settings, array $old )`. The settings changed |
+| `update_rehearsal_rehearsal_stopped` | action | `( array $report, int $post_id )`. Someone left the page in the middle of a rehearsal and History recorded it |
 | `update_rehearsal_cleaned_up` | action | `( int $bundles, int $reports )`. The hourly clean-up removed old bundles and reports |
 | `update_rehearsal_tables_skipped` | action | `( string[] $now, string[] $before )`. Someone changed which tables are left out of the copy on the Rehearse tab |
 | `update_rehearsal_steps_dismissed` | action | `( int $user_id )`. Someone closed the "Get started" card |
@@ -153,6 +184,7 @@ The rehearsal screen runs `wp.hooks`, read when used, so scripts that load later
 | `updateRehearsal.finished` | action | `( report, context )`. The run ended, finished or failed. `report.verdict` is the stored verdict |
 | `updateRehearsal.confirmUpdate` | filter | `( ask, context )`. Whether "Update for real" asks first. `ask`: `required` (true under amber and red), `level`, `reasons` (up to five, in words), `more`. `context`: `item`, `stored`. Return `required: false` to skip the question |
 | `updateRehearsal.inspect` | filter | `( reading, context )`. What the copy holds before and after adding or removing a plugin: `tables`, `options`, `autoload_bytes`, `cron`, `shortcodes`, `blocks` and, after, `orphans`. `context`: `phase`, `kind`, `items` |
+| `updateRehearsal.lowMemory` | filter | `( small, context )`. Whether to show the low-memory note before Start. Default true on a narrow screen, a device reporting 4 GB of memory or less, or two cores or fewer |
 | `updateRehearsal.estimated` | action | `( estimate )`. The size of the copy arrived on the Rehearse tab, after loading or "Measure again" |
 
 ```js
@@ -178,6 +210,7 @@ On WordPress 6.9 and later, Update Rehearsal registers [abilities](https://devel
 | `update-rehearsal/list-rehearsals` | Past rehearsals, newest first, with the kind, the verdict and reasons. Input: `verdict`, `kind` (`update`, `add` or `remove`), `limit`, `page` |
 | `update-rehearsal/get-rehearsal` | One rehearsal with its full report: pages, new errors by source, failed tables. Input: `id` |
 | `update-rehearsal/plan-rehearsal` | What a rehearsal would run, without running it. Input: `items`, keys such as `plugin:akismet/akismet.php`, `install:hello-dolly`, `deactivate:akismet/akismet.php` or `delete:akismet/akismet.php`; empty means every pending update. Says which exist, whether this person may do each one, whether the site fits the limit, and the `wp update-rehearsal bundle` command for a CI run |
+| `update-rehearsal/list-checks` | The checkout and the forms this person may rehearse, and whether Smoke Test's key URLs are used. Read-only: the checks themselves run in the browser, in the copy |
 | `update-rehearsal/get-bundle-estimate` | How big a copy would be on disk and once zipped, the limit, the biggest tables and plugin or theme folders, and the tables copied as structure only |
 
 Running a rehearsal needs a browser, because the copy runs in WordPress Playground there, so no ability starts one. For a rehearsal without a browser, see CI below.
@@ -189,6 +222,7 @@ wp update-rehearsal estimate [--fresh] [--format=table|csv|json|yaml]
 wp update-rehearsal updates [--format=table|csv|json|yaml|count]
 wp update-rehearsal search <term> [--format=table|csv|json|yaml|ids]
 wp update-rehearsal bundle [--output=<file>] [--updates=all|none|<keys>] [--add=<slugs>] [--remove=<plugins>] [--delete=<plugins>] [--php=<version>]
+wp update-rehearsal checks [--user=<user>] [--format=table|csv|json|yaml|count]
 wp update-rehearsal list [--verdict=<verdict>] [--kind=<kind>] [--per-page=<n>] [--page=<n>] [--fields=<fields>] [--format=table|csv|json|yaml|ids|count]
 wp update-rehearsal show <id> [--format=table|json|yaml]
 wp update-rehearsal settings [--scrub-users=on|off] [--inactive-plugins=on|off] [--include-tables=<tables>] [--skip-tables=<tables>] [--role-checks=on|off] [--steps=<steps>] [--extra-urls=<paths>] [--retention-days=<n>] [--format=table|json|yaml]
@@ -249,6 +283,18 @@ Bundles are built in `update-rehearsal/<random>/` in the system temp folder, wit
 Uninstalling deletes the reports, the options, the user meta, the job and the work folder.
 
 ## Privacy
+
+### What the copy keeps and replaces
+
+The same rules run for the copy in the browser and for `wp update-rehearsal bundle` (a zip that may end up as a CI artifact). They apply while "Replace user email addresses and password hashes" is on, or `update_rehearsal_scrub_users` is true. Turning it off copies everything as it is.
+
+| | What |
+| --- | --- |
+| **Replaced** | User emails (`user-<id>@example.invalid`), password hashes and activation keys. Comment author emails (`comment-<id>@example.invalid`), IP addresses and browser strings. WooCommerce billing and shipping emails and phone numbers, in user meta, in order meta in the posts tables, and in the HPOS tables (`wc_orders`, `wc_order_addresses`, `wc_customer_lookup`); the order's customer IP address, browser string and address search index. The site admin email. Option values that look like secrets: by name (secret, password, token, API key, private key, credential), by shape (live payment keys, access keys, private key blocks, Slack and GitHub tokens) and by key inside serialized or JSON settings (a gateway's webhook secret, for example). Plain on or off values are kept |
+| **Left out entirely** | Application passwords, login sessions, transients, this plugin's own reports, sessions and log tables without their rows |
+| **Kept as they are** | Names, postal addresses, order totals and items, post and comment text, ordinary options, every other plugin's tables (form entries, CRM data, membership records), and uploads (not copied, loaded from the live site) |
+
+Anything personal in another plugin's tables goes into the copy. Leave such a table out on the Settings tab, or replace its columns with `update_rehearsal_scrub_row`. The filters `update_rehearsal_secret_option_patterns` and `update_rehearsal_personal_meta_keys` change what counts as a secret or a personal key.
 
 A report notes which administrator ran it. The zip file of a plugin to add never leaves the browser, and the throwaway users in the copy have no real data. Reports take part in **Tools > Export Personal Data**, and **Tools > Erase Personal Data** removes the person from them and keeps the reports. **Settings > Privacy** gets suggested text that explains what the copy is and where it runs.
 
