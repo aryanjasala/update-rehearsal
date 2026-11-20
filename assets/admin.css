@@ -488,11 +488,21 @@
 }
 
 .urh-download-menu .button-link {
+	align-items: center;
+	display: flex;
+	min-height: 32px;
 	text-align: start;
+	text-decoration: none;
 }
 
 /* "Update for real" under red is a plain link. */
 
 .urh-update-real--plain {
 	margin-inline-start: 4px;
+}
+
+/* Screen reader text inside a scrolling table must stay inside it, or older WordPress adds a sideways scroll to the page. */
+
+.axle-scroll {
+	position: relative;
 }
